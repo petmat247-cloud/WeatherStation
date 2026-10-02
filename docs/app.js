@@ -241,6 +241,7 @@ function lineDataset(rows, key, label, color, filled = false) {
     pointRadius: 0,
     tension: 0.3,
     fill: filled,
+    spanGaps: true, // Propojí body i přes chybějící minuty
   };
 }
 
@@ -261,30 +262,40 @@ async function loadCharts(range) {
     }
     hideError('charts-error');
 
-    // Teplota — 3 křivky: venkovní, pocitová, rosný bod
+    // 1. Teplota venkovní — venkovní, pocitová, rosný bod
     createChart('chart-temp', [
       lineDataset(rows, 'temp_out',   'Venkovní (°C)',  'rgba(239,68,68,1)'),
       lineDataset(rows, 'feels_like', 'Pocitová (°C)',  'rgba(249,115,22,0.8)'),
       lineDataset(rows, 'dew_point',  'Rosný bod (°C)', 'rgba(59,130,246,0.7)'),
     ], '°C');
 
-    // Vlhkost
+    // 2. Vnitřní teplota doma
+    createChart('chart-temp-in', [
+      lineDataset(rows, 'temp_in', 'Vnitřní teplota doma (°C)', 'rgba(245,158,11,1)', true),
+    ], '°C');
+
+    // 3. Vlhkost venkovní
     createChart('chart-hum', [
       lineDataset(rows, 'humidity_out', 'Venkovní vlhkost (%)', 'rgba(34,197,94,1)'),
     ], '%');
 
-    // Tlak
+    // 4. Vnitřní vlhkost doma
+    createChart('chart-hum-in', [
+      lineDataset(rows, 'humidity_in', 'Vnitřní vlhkost doma (%)', 'rgba(13,148,136,1)', true),
+    ], '%');
+
+    // 5. Tlak
     createChart('chart-pres', [
       lineDataset(rows, 'pressure', 'Tlak (hPa)', 'rgba(59,130,246,1)'),
     ], 'hPa');
 
-    // Vítr — průměrná rychlost + nárazy
+    // 6. Vítr — průměrná rychlost + nárazy
     createChart('chart-wind', [
       lineDataset(rows, 'wind_speed', 'Průměrná rychlost (m/s)', 'rgba(168,85,247,1)'),
       lineDataset(rows, 'wind_gust',  'Nárazy (m/s)',            'rgba(249,115,22,0.8)'),
     ], 'm/s');
 
-    // Srážky — plná plocha
+    // 7. Srážky — plná plocha
     createChart('chart-rain', [
       {
         label: 'Intenzita srážek (mm/h)',
@@ -313,19 +324,27 @@ function buildStatCard(title, period) {
     <div class="stat-card">
       <h3>${title}</h3>
       <div class="stat-row">
-        <span class="label">Průměrná teplota</span>
+        <span class="label">Průměrná teplota venku</span>
         <span class="value">${fmt(period.avg_temp)} °C</span>
       </div>
       <div class="stat-row">
-        <span class="label">Max. teplota</span>
+        <span class="label">Max. teplota venku</span>
         <span class="value hot">${fmt(period.max_temp)} °C</span>
       </div>
       <div class="stat-row">
-        <span class="label">Min. teplota</span>
+        <span class="label">Min. teplota venku</span>
         <span class="value cold">${fmt(period.min_temp)} °C</span>
       </div>
       <div class="stat-row">
-        <span class="label">Průměrná vlhkost</span>
+        <span class="label">Průměrná vnitřní teplota</span>
+        <span class="value home-temp">${fmt(period.avg_temp_in)} °C</span>
+      </div>
+      <div class="stat-row">
+        <span class="label">Průměrná vnitřní vlhkost</span>
+        <span class="value home-hum">${fmt0(period.avg_hum_in)} %</span>
+      </div>
+      <div class="stat-row">
+        <span class="label">Průměrná vlhkost venku</span>
         <span class="value">${fmt0(period.avg_hum)} %</span>
       </div>
       <div class="stat-row">
@@ -377,6 +396,16 @@ async function loadRecords() {
         <div class="record-icon">🥶</div>
         <div class="record-label">Nejnižší teplota</div>
         <div class="record-value cold">${fmt(r.temp_min)} °C</div>
+      </div>
+      <div class="record-card">
+        <div class="record-icon">🏠</div>
+        <div class="record-label">Max. teplota doma</div>
+        <div class="record-value home-temp" style="color:var(--warn)">${fmt(r.temp_in_max)} °C</div>
+      </div>
+      <div class="record-card">
+        <div class="record-icon">❄️</div>
+        <div class="record-label">Min. teplota doma</div>
+        <div class="record-value home-temp" style="color:#0ea5e9">${fmt(r.temp_in_min)} °C</div>
       </div>
       <div class="record-card">
         <div class="record-icon">💨</div>

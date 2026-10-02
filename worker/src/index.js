@@ -327,6 +327,8 @@ async function handleRecords(db, corsHdrs) {
       SELECT
         ROUND(MAX(temp_out), 1)         AS temp_max,
         ROUND(MIN(temp_out), 1)         AS temp_min,
+        ROUND(MAX(temp_in), 1)          AS temp_in_max,
+        ROUND(MIN(temp_in), 1)          AS temp_in_min,
         ROUND(MAX(pressure), 1)         AS pressure_max,
         ROUND(MIN(pressure), 1)         AS pressure_min,
         ROUND(MAX(wind_gust), 1)        AS wind_gust_max,
@@ -334,6 +336,8 @@ async function handleRecords(db, corsHdrs) {
         ROUND(MAX(rain_total), 1)       AS rain_total_max,
         MIN(humidity_out)               AS humidity_min,
         MAX(humidity_out)               AS humidity_max,
+        MIN(humidity_in)                AS humidity_in_min,
+        MAX(humidity_in)                AS humidity_in_max,
         datetime(MIN(timestamp), 'unixepoch') AS oldest_record,
         datetime(MAX(timestamp), 'unixepoch') AS newest_record,
         COUNT(*)                        AS total_records
@@ -352,18 +356,24 @@ async function handleStats(db, corsHdrs) {
     db.prepare(`
       SELECT ROUND(AVG(temp_out),1) avg_temp, ROUND(MAX(temp_out),1) max_temp,
              ROUND(MIN(temp_out),1) min_temp, ROUND(AVG(humidity_out),0) avg_hum,
+             ROUND(AVG(temp_in),1) avg_temp_in, ROUND(MAX(temp_in),1) max_temp_in,
+             ROUND(MIN(temp_in),1) min_temp_in, ROUND(AVG(humidity_in),0) avg_hum_in,
              ROUND(MAX(wind_gust),1) max_gust, COUNT(*) records
       FROM measurements WHERE timestamp >= ?
     `).bind(now - 86400).first(),
     db.prepare(`
       SELECT ROUND(AVG(temp_out),1) avg_temp, ROUND(MAX(temp_out),1) max_temp,
              ROUND(MIN(temp_out),1) min_temp, ROUND(AVG(humidity_out),0) avg_hum,
+             ROUND(AVG(temp_in),1) avg_temp_in, ROUND(MAX(temp_in),1) max_temp_in,
+             ROUND(MIN(temp_in),1) min_temp_in, ROUND(AVG(humidity_in),0) avg_hum_in,
              ROUND(MAX(wind_gust),1) max_gust, COUNT(*) records
       FROM measurements WHERE timestamp >= ?
     `).bind(now - 7 * 86400).first(),
     db.prepare(`
       SELECT ROUND(AVG(temp_out),1) avg_temp, ROUND(MAX(temp_out),1) max_temp,
              ROUND(MIN(temp_out),1) min_temp, ROUND(AVG(humidity_out),0) avg_hum,
+             ROUND(AVG(temp_in),1) avg_temp_in, ROUND(MAX(temp_in),1) max_temp_in,
+             ROUND(MIN(temp_in),1) min_temp_in, ROUND(AVG(humidity_in),0) avg_hum_in,
              ROUND(MAX(wind_gust),1) max_gust, COUNT(*) records
       FROM measurements WHERE timestamp >= ?
     `).bind(now - 30 * 86400).first(),
