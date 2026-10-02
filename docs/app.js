@@ -179,10 +179,37 @@ function commonChartOptions(yLabel) {
         type: 'time',
         time: {
           tooltipFormat: 'dd.MM. HH:mm',
-          displayFormats: { hour: 'HH:mm', day: 'dd.MM.' },
+          displayFormats: {
+            millisecond: 'HH:mm:ss',
+            second:      'HH:mm:ss',
+            minute:      'HH:mm',
+            hour:        'HH:mm',
+            day:         'dd.MM.',
+            week:        'dd.MM.',
+            month:       'MM.yyyy',
+            quarter:     'MM.yyyy',
+            year:        'yyyy',
+          },
         },
+        adapters: {},
         grid:  { color: cc.gridColor },
-        ticks: { color: cc.textColor, maxRotation: 0, maxTicksLimit: 8 },
+        ticks: {
+          color: cc.textColor,
+          maxRotation: 0,
+          maxTicksLimit: 8,
+          // Vynucení 24h formátu bez ohledu na locale prohlížeče
+          callback(value) {
+            const d = new Date(value);
+            const h  = String(d.getHours()).padStart(2, '0');
+            const m  = String(d.getMinutes()).padStart(2, '0');
+            const dd = String(d.getDate()).padStart(2, '0');
+            const mo = String(d.getMonth() + 1).padStart(2, '0');
+            // Pokud je krok denní nebo větší, zobraz datum; jinak jen čas
+            const rangeActive = document.querySelector('.range-btn.active')?.dataset.range ?? '24h';
+            const showDate = ['7d','30d','60d','90d','180d','365d','all'].includes(rangeActive);
+            return showDate ? `${dd}.${mo}.` : `${h}:${m}`;
+          },
+        },
       },
       y: {
         title: { display: !!yLabel, text: yLabel, color: cc.textColor, font: { size: 11 } },
