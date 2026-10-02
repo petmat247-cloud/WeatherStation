@@ -406,6 +406,7 @@ async function handleFetch(request, env, ctx) {
     if (path === '/api/daily')   return await handleDaily(env.DB, url, corsHdrs);
     if (path === '/api/records') return await handleRecords(env.DB, corsHdrs);
     if (path === '/api/stats')   return await handleStats(env.DB, corsHdrs);
+    if (path === '/api/test-wc') return await handleTestWeathercloud(env, corsHdrs);
 
     return errorResponse('Endpoint neexistuje', 404, corsHdrs);
   } catch (err) {
@@ -418,69 +419,78 @@ async function handleFetch(request, env, ctx) {
 
 // ─── Weathercloud indoor data ─────────────────────────────────────────────────
 
+const BROWSER_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36';
+
 /**
  * Stáhne aktuální data ze Weathercloudu pomocí neoficiálního webového endpointu.
- *
- * Endpoint vrací JSON s aktuálními hodnotami stanice — včetně indoor teploty (tempin)
- * a indoor vlhkosti (humin), které WU API neposkytuje.
- *
- * Poznámka: Teploty jsou vráceny * 10 (tj. 215 = 21.5 °C). Vlhkost je v procentech.
- *
- * Toto je neoficiální endpoint — funguje dokud je session cookie platná.
- * Cookie je uložena jako Cloudflare Secret (WC_COOKIE) a musí být občas obnovena.
+ * Zkouší ID jak v čisté číselné podobě, tak případně s prefixem 'd'.
  */
 async function fetchFromWeathercloud(deviceId, cookie) {
-  const url = `https://app.weathercloud.net/device/values?code=${deviceId}`;
+  const cleanId = String(deviceId).trim().replace(/^d/i, '');
+  const rawId   = String(deviceId).trim();
+  const idsToTry = Array.from(new Set([cleanId, rawId]));
 
-  const response = await fetch(url, {
-    headers: {
-      'Cookie'          : cookie,
-      'Accept'          : 'application/json, text/javascript, */*',
-      'X-Requested-With': 'XMLHttpRequest',
-      'Referer'         : `https://app.weathercloud.net/device/${deviceId}`,
-      'User-Agent'      : 'Mozilla/5.0 (compatible; Stanice-Worker/1.0)',
-    },
-    cf: { cacheTtl: 0 },
-  });
+  let lastError = null;
 
-  if (response.status === 401 || response.status === 403) {
-    throw new Error('Weathercloud: session cookie vypršela nebo je neplatná (401/403)');
+  for (const id of idsToTry) {
+    const url = `https://app.weathercloud.net/device/values?code=${id}`;
+    try {
+      const response = await fetch(url, {
+        headers: {
+          'Cookie'          : cookie,
+          'Accept'          : 'application/json, text/javascript, */*',
+          'X-Requested-With': 'XMLHttpRequest',
+          'Referer'         : `https://app.weathercloud.net/device/${id}`,
+          'User-Agent'      : BROWSER_UA,
+        },
+        cf: { cacheTtl: 0 },
+      });
+
+      if (response.status === 401 || response.status === 403) {
+        throw new Error(`Weathercloud vrátil status ${response.status} (neplatná/vypršená session cookie nebo blokace)`);
+      }
+      if (!response.ok) {
+        throw new Error(`Weathercloud HTTP chyba: ${response.status}`);
+      }
+
+      const text = await response.text();
+      let data = null;
+      try {
+        data = JSON.parse(text);
+      } catch (parseErr) {
+        throw new Error(`Weathercloud nevrátil JSON: ${text.slice(0, 150)}`);
+      }
+
+      if (!data || (data.tempin === undefined && data.humin === undefined)) {
+        continue; // zkus další formát ID
+      }
+
+      const rawTempIn = data.tempin;
+      const rawHumIn  = data.humin;
+
+      const tempIn = (rawTempIn !== null && rawTempIn !== '' && rawTempIn !== undefined)
+        ? parseFloat(rawTempIn) / 10
+        : null;
+
+      const humIn = (rawHumIn !== null && rawHumIn !== '' && rawHumIn !== undefined)
+        ? parseInt(rawHumIn, 10)
+        : null;
+
+      return { tempIn, humIn, usedId: id };
+    } catch (err) {
+      lastError = err;
+    }
   }
-  if (!response.ok) {
-    throw new Error(`Weathercloud: HTTP ${response.status}`);
-  }
 
-  const data = await response.json();
-
-  // tempin a humin — Weathercloud vrací teplotu * 10 (nebo null / prázdný string)
-  const rawTempIn = data.tempin;
-  const rawHumIn  = data.humin;
-
-  // Konverze: hodnota / 10 → °C; null/prázdný string → null
-  const tempIn = (rawTempIn !== null && rawTempIn !== '' && rawTempIn !== undefined)
-    ? parseFloat(rawTempIn) / 10
-    : null;
-
-  const humIn = (rawHumIn !== null && rawHumIn !== '' && rawHumIn !== undefined)
-    ? parseInt(rawHumIn, 10)
-    : null;
-
-  if (tempIn === null && humIn === null) {
-    throw new Error('Weathercloud: indoor data nejsou v odpovědi (tempin a humin jsou null)');
-  }
-
-  return { tempIn, humIn };
+  throw lastError || new Error('Weathercloud: nepodařilo se načíst indoor data');
 }
 
 /**
- * Doplní (UPDATE) indoor teplotu a vlhkost do posledních WU záznamů v D1.
- *
- * Logika: Weathercloud aktualizuje každých ~10 minut. Doplníme indoor hodnoty
- * do všech WU záznamů z posledních 15 minut kde temp_in IS NULL.
- * Tím pokryjeme přibližně 15 minutových WU záznamů najednou.
+ * Doplní (UPDATE) indoor teplotu a vlhkost do záznamů v D1.
+ * Aktualizuje všechny záznamy z posledních 2 hodin, kde chybí temp_in.
  */
 async function updateIndoorData(db, tempIn, humIn) {
-  const cutoff = Math.floor(Date.now() / 1000) - 15 * 60; // posledních 15 minut
+  const cutoff = Math.floor(Date.now() / 1000) - 2 * 3600; // posledních 2 hodiny
 
   const result = await db.prepare(`
     UPDATE measurements
@@ -495,7 +505,6 @@ async function updateIndoorData(db, tempIn, humIn) {
 
 /**
  * Cron handler pro Weathercloud (spouští se každých 10 minut).
- * Stáhne indoor data a doplní je do posledních WU záznamů.
  */
 async function handleWeathercloudCron(env) {
   if (!env.WC_DEVICE_ID || !env.WC_COOKIE) {
@@ -504,13 +513,94 @@ async function handleWeathercloudCron(env) {
   }
 
   try {
-    const { tempIn, humIn } = await fetchFromWeathercloud(env.WC_DEVICE_ID, env.WC_COOKIE);
+    const { tempIn, humIn, usedId } = await fetchFromWeathercloud(env.WC_DEVICE_ID, env.WC_COOKIE);
     const result = await updateIndoorData(env.DB, tempIn, humIn);
-    console.log(`[WC-CRON] OK — tempIn: ${tempIn}°C, humIn: ${humIn}% | aktualizováno záznamů: ${result.meta?.changes ?? '?'}`);
+    console.log(`[WC-CRON] OK (${usedId}) — tempIn: ${tempIn}°C, humIn: ${humIn}% | aktualizováno: ${result.meta?.changes ?? 0} řádků`);
   } catch (err) {
-    // Zalogujeme chybu (viditelná v Cloudflare logách), ale nic nevracíme
-    console.error('[WC-CRON] Chyba při stahování indoor dat:', err.message);
+    console.error('[WC-CRON] Chyba:', err.message);
   }
+}
+
+/**
+ * Diagnostický endpoint GET /api/test-wc pro okamžité otestování přímo v prohlížeči
+ */
+async function handleTestWeathercloud(env, corsHdrs) {
+  const deviceId = env.WC_DEVICE_ID;
+  const cookie   = env.WC_COOKIE;
+
+  if (!deviceId || !cookie) {
+    return jsonResponse({
+      success: false,
+      error: 'V Cloudflare chybí nastavené secrets!',
+      has_WC_DEVICE_ID: !!deviceId,
+      has_WC_COOKIE: !!cookie,
+    }, 400, corsHdrs);
+  }
+
+  const cleanId = String(deviceId).trim().replace(/^d/i, '');
+  const rawId   = String(deviceId).trim();
+  const idsToTry = Array.from(new Set([cleanId, rawId]));
+  const log = [];
+
+  for (const id of idsToTry) {
+    const url = `https://app.weathercloud.net/device/values?code=${id}`;
+    try {
+      const response = await fetch(url, {
+        headers: {
+          'Cookie'          : cookie,
+          'Accept'          : 'application/json, text/javascript, */*',
+          'X-Requested-With': 'XMLHttpRequest',
+          'Referer'         : `https://app.weathercloud.net/device/${id}`,
+          'User-Agent'      : BROWSER_UA,
+        },
+        cf: { cacheTtl: 0 },
+      });
+
+      const text = await response.text();
+      let parsed = null;
+      try { parsed = JSON.parse(text); } catch (_) {}
+
+      log.push({
+        id,
+        status: response.status,
+        responseSample: text.slice(0, 300),
+        isJson: !!parsed,
+      });
+
+      if (parsed && (parsed.tempin !== undefined || parsed.humin !== undefined)) {
+        const rawTempIn = parsed.tempin;
+        const rawHumIn  = parsed.humin;
+        const tempIn = (rawTempIn !== null && rawTempIn !== '' && rawTempIn !== undefined)
+          ? parseFloat(rawTempIn) / 10 : null;
+        const humIn = (rawHumIn !== null && rawHumIn !== '' && rawHumIn !== undefined)
+          ? parseInt(rawHumIn, 10) : null;
+
+        let dbResult = null;
+        if (tempIn !== null || humIn !== null) {
+          const res = await updateIndoorData(env.DB, tempIn, humIn);
+          dbResult = { rowsUpdated: res.meta?.changes ?? 0 };
+        }
+
+        return jsonResponse({
+          success: true,
+          message: 'Weathercloud spojení funguje a data byla uložena!',
+          usedId: id,
+          tempIn,
+          humIn,
+          dbResult,
+          diagnostics: log,
+        }, 200, corsHdrs);
+      }
+    } catch (err) {
+      log.push({ id, error: err.message });
+    }
+  }
+
+  return jsonResponse({
+    success: false,
+    message: 'Spojení selhalo. Zkontrolujte diagnostiku níže.',
+    diagnostics: log,
+  }, 200, corsHdrs);
 }
 
 // ─── Export (Cloudflare Workers API) ─────────────────────────────────────────
