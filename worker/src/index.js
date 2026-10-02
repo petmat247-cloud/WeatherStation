@@ -287,7 +287,7 @@ async function handleHistory(db, url, corsHdrs) {
 
   let rows;
   if (step <= 60) {
-    // Krátký rozsah (≤ 24h při limitu 1440) — vrátíme všechny záznamy bez vzorkování.
+    // Krátký rozsah (≤ ~24h) — vrátíme všechny záznamy bez vzorkování.
     rows = await db
       .prepare(`
         SELECT * FROM measurements
@@ -298,13 +298,18 @@ async function handleHistory(db, url, corsHdrs) {
       .bind(from, to, limit)
       .all();
   } else {
-    // Dlouhý rozsah — vzorkujeme: vezmeme vždy první záznam z každého časového bucketu.
-    // (timestamp - from) / step = číslo bucketu; bucket * step + from = začátek bucketu.
+    // Dlouhý rozsah — vzorkujeme pomocí GROUP BY časového bucketu.
+    // Pro každý interval délky `step` sekund vezmeme první (nejstarší) záznam.
+    // Toto funguje spolehlivě bez ohledu na to, jak jsou timestamps v DB zarovnány.
     rows = await db
       .prepare(`
         SELECT * FROM measurements
-        WHERE timestamp BETWEEN ? AND ?
-          AND (timestamp - ?) % ? < 60
+        WHERE rowid IN (
+          SELECT MIN(rowid)
+          FROM measurements
+          WHERE timestamp BETWEEN ? AND ?
+          GROUP BY CAST((timestamp - ?) / ? AS INTEGER)
+        )
         ORDER BY timestamp ASC
         LIMIT ?
       `)
