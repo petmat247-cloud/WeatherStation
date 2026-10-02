@@ -88,15 +88,27 @@ Frontend — GitHub Pages (dashboard s grafy)
 
 ---
 
+## ✅ HOTOVO (pokračování)
+
+### Chat 5 — Frontend dashboard (2. října 2026)
+- [x] Vytvořen kompletní `docs/index.html` — nahrazuje placeholder
+  - Záložková struktura: Aktuálně / Grafy / Statistiky / Rekordy
+  - Světlý + tmavý režim (auto-detect + manuální přepínání, uložení do localStorage)
+  - **Aktuálně:** 6 karet (venkovní teplota, vnitřní teplota, vlhkost, tlak, vítr, srážky)
+  - Pocitová teplota, rosný bod, popis vlhkosti a tlaku, šipka směru větru
+  - **Grafy:** 5 grafů s Chart.js — teplota, vlhkost, tlak, vítr, srážky
+  - Přepínání rozsahu: 24h / 7 dní / 30 dní
+  - **Statistiky:** 24h / 7d / 30d (avg/max/min teplota, vlhkost, vítr, záznamy)
+  - **Rekordy:** absolutní rekordy ze všech ~17 000+ záznamů
+  - Automatická obnova každou minutu
+  - Responzivní design (funguje na mobilu)
+- [x] Pushnut na GitHub → GitHub Pages živé a aktuální
+
+---
+
 ## 🔜 CO ZBÝVÁ
 
-### Krok C — Frontend dashboard ← DALŠÍ NA ŘADĚ
-Vytvořit `docs/index.html` (nahradí placeholder) s:
-- Aktuální hodnoty (teplota, vlhkost, tlak, vítr, déšť)
-- Grafy historie (Chart.js nebo podobná knihovna)
-- Denní rekordy a statistiky
-- Vše napojeno na REST API Workeru (`stanice-worker.petmat247.workers.dev`)
-- Workflow: upravit ve VS Code → Commit & Push → GitHub Pages se aktualizuje za ~30s
+### Krok C — Frontend dashboard ✅ HOTOVO
 
 ### Krok D — Průběžný import nových CSV
 Každý měsíc stáhnout CSV ze Weathercloudu do `Tabulky/` a spustit:
