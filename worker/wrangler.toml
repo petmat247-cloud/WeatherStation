@@ -2,9 +2,11 @@ name = "stanice-worker"
 main = "src/index.js"
 compatibility_date = "2024-01-01"
 
-# ── Cron trigger: stahuje data z WU každou minutu ──────────────────────────────
+# ── Cron triggery ───────────────────────────────────────────────────────────────
+# "* * * * *"    → každou minutu: stahuje aktuální data z WU API → D1
+# "*/10 * * * *" → každých 10 minut: doplňuje indoor data z Weathercloud → D1 (UPDATE)
 [triggers]
-crons = ["* * * * *"]
+crons = ["* * * * *", "*/10 * * * *"]
 
 # ── D1 databáze ────────────────────────────────────────────────────────────────
 # database_id zjistíš příkazem: npx wrangler d1 list
@@ -15,9 +17,11 @@ database_id  = "2ca5d340-b444-4083-b85d-18d0150efc62"
 
 # ── Secrets (NIKDY sem nepište hodnoty — nastavují se přes wrangler secret put) ─
 # Použité proměnné prostředí v kódu:
-#   env.WU_STATION_ID  → ID tvé stanice na Weather Underground (napr. IXXXXX12)
-#   env.WU_API_KEY     → API klíč z wunderground.com/member/api-keys
-#   env.ALLOWED_ORIGIN → URL tvé GitHub Pages stránky (napr. https://petmat247.github.io)
+#   env.WU_STATION_ID      → ID tvé stanice na Weather Underground (napr. IXXXXX12)
+#   env.WU_API_KEY         → API klíč z wunderground.com/member/api-keys
+#   env.ALLOWED_ORIGIN     → URL tvé GitHub Pages stránky (napr. https://petmat247.github.io)
+#   env.WC_DEVICE_ID       → Weathercloud Device ID (číslo ze URL na app.weathercloud.net)
+#   env.WC_COOKIE          → Session cookie z přihlášení na app.weathercloud.net
 
 # ── Nastavení proměnných (ne tajemství) ────────────────────────────────────────
 [vars]

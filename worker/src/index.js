@@ -396,6 +396,104 @@ async function handleFetch(request, env, ctx) {
   }
 }
 
+
+// ─── Weathercloud indoor data ─────────────────────────────────────────────────
+
+/**
+ * Stáhne aktuální data ze Weathercloudu pomocí neoficiálního webového endpointu.
+ *
+ * Endpoint vrací JSON s aktuálními hodnotami stanice — včetně indoor teploty (tempin)
+ * a indoor vlhkosti (humin), které WU API neposkytuje.
+ *
+ * Poznámka: Teploty jsou vráceny * 10 (tj. 215 = 21.5 °C). Vlhkost je v procentech.
+ *
+ * Toto je neoficiální endpoint — funguje dokud je session cookie platná.
+ * Cookie je uložena jako Cloudflare Secret (WC_COOKIE) a musí být občas obnovena.
+ */
+async function fetchFromWeathercloud(deviceId, cookie) {
+  const url = `https://app.weathercloud.net/device/values?code=${deviceId}`;
+
+  const response = await fetch(url, {
+    headers: {
+      'Cookie'          : cookie,
+      'Accept'          : 'application/json, text/javascript, */*',
+      'X-Requested-With': 'XMLHttpRequest',
+      'Referer'         : `https://app.weathercloud.net/device/${deviceId}`,
+      'User-Agent'      : 'Mozilla/5.0 (compatible; Stanice-Worker/1.0)',
+    },
+    cf: { cacheTtl: 0 },
+  });
+
+  if (response.status === 401 || response.status === 403) {
+    throw new Error('Weathercloud: session cookie vypršela nebo je neplatná (401/403)');
+  }
+  if (!response.ok) {
+    throw new Error(`Weathercloud: HTTP ${response.status}`);
+  }
+
+  const data = await response.json();
+
+  // tempin a humin — Weathercloud vrací teplotu * 10 (nebo null / prázdný string)
+  const rawTempIn = data.tempin;
+  const rawHumIn  = data.humin;
+
+  // Konverze: hodnota / 10 → °C; null/prázdný string → null
+  const tempIn = (rawTempIn !== null && rawTempIn !== '' && rawTempIn !== undefined)
+    ? parseFloat(rawTempIn) / 10
+    : null;
+
+  const humIn = (rawHumIn !== null && rawHumIn !== '' && rawHumIn !== undefined)
+    ? parseInt(rawHumIn, 10)
+    : null;
+
+  if (tempIn === null && humIn === null) {
+    throw new Error('Weathercloud: indoor data nejsou v odpovědi (tempin a humin jsou null)');
+  }
+
+  return { tempIn, humIn };
+}
+
+/**
+ * Doplní (UPDATE) indoor teplotu a vlhkost do posledních WU záznamů v D1.
+ *
+ * Logika: Weathercloud aktualizuje každých ~10 minut. Doplníme indoor hodnoty
+ * do všech WU záznamů z posledních 15 minut kde temp_in IS NULL.
+ * Tím pokryjeme přibližně 15 minutových WU záznamů najednou.
+ */
+async function updateIndoorData(db, tempIn, humIn) {
+  const cutoff = Math.floor(Date.now() / 1000) - 15 * 60; // posledních 15 minut
+
+  const result = await db.prepare(`
+    UPDATE measurements
+    SET    temp_in = ?, humidity_in = ?
+    WHERE  source = 'wunderground'
+      AND  timestamp >= ?
+      AND  temp_in IS NULL
+  `).bind(tempIn, humIn, cutoff).run();
+
+  return result;
+}
+
+/**
+ * Cron handler pro Weathercloud (spouští se každých 10 minut).
+ * Stáhne indoor data a doplní je do posledních WU záznamů.
+ */
+async function handleWeathercloudCron(env) {
+  if (!env.WC_DEVICE_ID || !env.WC_COOKIE) {
+    console.error('[WC-CRON] Chybí WC_DEVICE_ID nebo WC_COOKIE secret!');
+    return;
+  }
+
+  try {
+    const { tempIn, humIn } = await fetchFromWeathercloud(env.WC_DEVICE_ID, env.WC_COOKIE);
+    const result = await updateIndoorData(env.DB, tempIn, humIn);
+    console.log(`[WC-CRON] OK — tempIn: ${tempIn}°C, humIn: ${humIn}% | aktualizováno záznamů: ${result.meta?.changes ?? '?'}`);
+  } catch (err) {
+    // Zalogujeme chybu (viditelná v Cloudflare logách), ale nic nevracíme
+    console.error('[WC-CRON] Chyba při stahování indoor dat:', err.message);
+  }
+}
+
 // ─── Export (Cloudflare Workers API) ─────────────────────────────────────────
 
 export default {
@@ -404,8 +502,14 @@ export default {
     return handleFetch(request, env, ctx);
   },
 
-  // Cron trigger (každou minutu)
+  // Cron triggery — rozlišujeme podle výrazu
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(handleCron(env));
+    if (event.cron === '* * * * *') {
+      // Každou minutu: WU API → D1
+      ctx.waitUntil(handleCron(env));
+    } else if (event.cron === '*/10 * * * *') {
+      // Každých 10 minut: Weathercloud → UPDATE indoor dat v D1
+      ctx.waitUntil(handleWeathercloudCron(env));
+    }
   },
 };
