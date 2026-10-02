@@ -13,3 +13,8 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+
+# Word dočasné soubory
+~$*.docx
+~$*.xlsx
+~$*.pptx
