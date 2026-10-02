@@ -97,6 +97,9 @@ Frontend — GitHub Pages (dashboard s grafy)
   - Automatická obnova každou minutu
   - Responzivní design (funguje na mobilu i desktopu)
 - [x] Pushnut na GitHub → GitHub Pages živé ✅
+- [x] Zprovozněno stahování **živých indoor dat z Weathercloudu** každých 10 minut:
+  - Doplňuje `temp_in` a `humidity_in` do live záznamů v D1
+  - Karta vnitřní teploty na webu i API `/api/current` již plnohodnotně zobrazují vnitřní teplotu a vlhkost domova ✅
 
 ---
 
