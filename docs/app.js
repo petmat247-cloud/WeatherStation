@@ -221,14 +221,33 @@ function refreshChartColors() {
 
 /** Vrátí počet sekund pro daný rozsah. */
 function rangeToSeconds(range) {
-  return { '24h': 86400, '7d': 7 * 86400, '30d': 30 * 86400, '60d': 60 * 86400, '90d': 90 * 86400 }[range] ?? 86400;
+  return {
+    '1h'  : 3600,
+    '24h' : 86400,
+    '7d'  : 7   * 86400,
+    '30d' : 30  * 86400,
+    '60d' : 60  * 86400,
+    '90d' : 90  * 86400,
+    '180d': 180 * 86400,
+    '365d': 365 * 86400,
+    'all' : 1825 * 86400,  // ~5 let — pokryje celou historii i budoucí data
+  }[range] ?? 86400;
 }
 
 /** Vrátí maximální počet záznamů pro daný rozsah.
  *  API limit je 1440 — pro delší rozsahy Worker automaticky proředí vzorkování. */
 function rangeToLimit(range) {
-  // 24h po minutě = 1440, 7d po ~10min = 1008, 30d/60d/90d = 1440 (proředěno)
-  return { '24h': 1440, '7d': 1008, '30d': 1440, '60d': 1440, '90d': 1440 }[range] ?? 1440;
+  return {
+    '1h'  : 70,    // každou minutu = max 60 bodů, trochu rezervy
+    '24h' : 1440,
+    '7d'  : 1008,
+    '30d' : 1440,
+    '60d' : 1440,
+    '90d' : 1440,
+    '180d': 1440,
+    '365d': 1440,
+    'all' : 1440,
+  }[range] ?? 1440;
 }
 
 /** Pomocná funkce pro definici datasetu grafu. */
