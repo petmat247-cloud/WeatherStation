@@ -144,7 +144,8 @@ Stanice/
 └── docs/                            ← GitHub Pages (frontend) ✅
     ├── index.html                   ← HTML kostra dashboardu ✅
     ├── style.css                    ← styly + light/dark theme ✅
-    └── app.js                       ← logika, API volání, grafy ✅
+    ├── app.js                       ← logika, API volání, grafy ✅
+    └── Navod_Obnova_Weathercloud_Cookie.docx ← podrobný návod pro obnovu cookie ✅
 ```
 
 ---

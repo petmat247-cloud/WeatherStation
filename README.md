@@ -165,7 +165,8 @@ Stanice/
 ├── docs/                      # GitHub Pages (frontend) — nasazeno ✅
 │   ├── index.html             # HTML kostra dashboardu
 │   ├── style.css              # Styly + light/dark theme
-│   └── app.js                 # Logika, API volání, Chart.js grafy
+│   ├── app.js                 # Logika, API volání, Chart.js grafy
+│   └── Navod_Obnova_Weathercloud_Cookie.docx # Podrobný návod na obnovu cookie ✅
 │
 ├── worker/                    # Cloudflare Worker (backend) — nasazeno ✅
 │   ├── src/
