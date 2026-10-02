@@ -1,0 +1,26 @@
+name = "stanice-worker"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+
+# ── Cron trigger: stahuje data z WU každou minutu ──────────────────────────────
+[triggers]
+crons = ["* * * * *"]
+
+# ── D1 databáze ────────────────────────────────────────────────────────────────
+# database_id zjistíš příkazem: npx wrangler d1 list
+[[d1_databases]]
+binding      = "DB"
+database_name = "stanice-db"
+database_id  = "2ca5d340-b444-4083-b85d-18d0150efc62"
+
+# ── Secrets (NIKDY sem nepište hodnoty — nastavují se přes wrangler secret put) ─
+# Použité proměnné prostředí v kódu:
+#   env.WU_STATION_ID  → ID tvé stanice na Weather Underground (napr. IXXXXX12)
+#   env.WU_API_KEY     → API klíč z wunderground.com/member/api-keys
+#   env.ALLOWED_ORIGIN → URL tvé GitHub Pages stránky (napr. https://petmat247.github.io)
+
+# ── Nastavení proměnných (ne tajemství) ────────────────────────────────────────
+[vars]
+# Sem ALLOWED_ORIGIN napsat MŮŽEŠ, protože to není tajemství.
+# Změň na svoji skutečnou GitHub Pages URL až ji budeš mít.
+ALLOWED_ORIGIN = "https://petmat247.github.io"

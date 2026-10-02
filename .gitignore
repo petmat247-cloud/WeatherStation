@@ -1,0 +1,15 @@
+# Závislosti
+node_modules/
+
+# Systémové soubory
+.DS_Store
+Thumbs.db
+
+# Wrangler lokální cache
+.wrangler/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
