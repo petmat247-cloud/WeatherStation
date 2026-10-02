@@ -225,8 +225,27 @@ async function handleCurrent(db, corsHdrs, cacheApi, cacheKey) {
     return jsonResponse(body, 200, { ...corsHdrs, 'X-Cache': 'HIT' });
   }
 
+  // Outdoor data z nejnovějšího záznamu.
+  // Indoor data (temp_in, humidity_in) z posledního záznamu kde NEJSOU null —
+  // WU API indoor hodnoty neposkytuje, doplňuje je Weathercloud cron každých 10 min.
+  // Subquery zajistí, že karta nikdy nezobrazí '—' jen proto, že poslední minutový
+  // WU záznam ještě nebyl aktualizován Weathercloud cronem.
   const row = await db
-    .prepare('SELECT * FROM measurements ORDER BY timestamp DESC LIMIT 1')
+    .prepare(`
+      SELECT
+        m.*,
+        COALESCE(m.temp_in,
+          (SELECT temp_in FROM measurements
+           WHERE temp_in IS NOT NULL ORDER BY timestamp DESC LIMIT 1)
+        ) AS temp_in,
+        COALESCE(m.humidity_in,
+          (SELECT humidity_in FROM measurements
+           WHERE humidity_in IS NOT NULL ORDER BY timestamp DESC LIMIT 1)
+        ) AS humidity_in
+      FROM measurements m
+      ORDER BY m.timestamp DESC
+      LIMIT 1
+    `)
     .first();
 
   if (!row) return errorResponse('Žádná data', 404, corsHdrs);
