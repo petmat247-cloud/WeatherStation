@@ -4,450 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Stanice — Meteorologický dashboard</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-  <style>
-    /* ═══════════════════════════════════════════════════
-       CSS CUSTOM PROPERTIES — Light & Dark theme
-    ═══════════════════════════════════════════════════ */
-    :root {
-      --bg:           #f0f4f8;
-      --surface:      #ffffff;
-      --surface2:     #e8eef5;
-      --border:       #d1dae6;
-      --text:         #1a2233;
-      --text-muted:   #64748b;
-      --accent:       #2563eb;
-      --accent-light: #dbeafe;
-      --success:      #16a34a;
-      --warn:         #d97706;
-      --danger:       #dc2626;
-
-      /* Karta barvy */
-      --card-temp:    #fff7ed;
-      --card-hum:     #f0fdf4;
-      --card-pres:    #eff6ff;
-      --card-wind:    #fdf4ff;
-      --card-rain:    #ecfeff;
-      --card-in:      #fefce8;
-
-      /* Barvy grafů */
-      --chart-temp:   rgba(239, 68, 68, 1);
-      --chart-hum:    rgba(34, 197, 94, 1);
-      --chart-pres:   rgba(59, 130, 246, 1);
-      --chart-wind:   rgba(168, 85, 247, 1);
-      --chart-rain:   rgba(6, 182, 212, 1);
-      --chart-gust:   rgba(249, 115, 22, 1);
-    }
-
-    [data-theme="dark"] {
-      --bg:           #0f172a;
-      --surface:      #1e293b;
-      --surface2:     #293548;
-      --border:       #334155;
-      --text:         #e2e8f0;
-      --text-muted:   #94a3b8;
-      --accent:       #3b82f6;
-      --accent-light: #1e3a5f;
-      --success:      #22c55e;
-      --warn:         #f59e0b;
-      --danger:       #f87171;
-
-      --card-temp:    #2d1b0a;
-      --card-hum:     #0a2d1a;
-      --card-pres:    #0a1a3d;
-      --card-wind:    #20103a;
-      --card-rain:    #062a33;
-      --card-in:      #2d2a00;
-    }
-
-    /* ═══════════════════════════════════════════════════
-       RESET & BASE
-    ═══════════════════════════════════════════════════ */
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      transition: background 0.3s, color 0.3s;
-      min-height: 100vh;
-    }
-
-    /* ═══════════════════════════════════════════════════
-       HEADER
-    ═══════════════════════════════════════════════════ */
-    header {
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      padding: 0.75rem 1.5rem;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      position: sticky;
-      top: 0;
-      z-index: 100;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-    }
-
-    .header-left {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-    }
-
-    .logo {
-      font-size: 1.5rem;
-      font-weight: 700;
-      color: var(--accent);
-      letter-spacing: -0.5px;
-    }
-
-    .logo span { font-size: 1.1rem; }
-
-    .header-meta {
-      font-size: 0.8rem;
-      color: var(--text-muted);
-      line-height: 1.4;
-    }
-
-    .header-right { display: flex; align-items: center; gap: 0.75rem; }
-
-    /* Status indikátor */
-    .status-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: #94a3b8;
-      display: inline-block;
-      margin-right: 4px;
-      transition: background 0.3s;
-    }
-    .status-dot.online { background: var(--success); animation: pulse 2s infinite; }
-    .status-dot.error  { background: var(--danger); }
-
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.5; }
-    }
-
-    /* Dark mode toggle */
-    .theme-btn {
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 0.4rem 0.7rem;
-      cursor: pointer;
-      font-size: 1rem;
-      color: var(--text);
-      transition: background 0.2s;
-    }
-    .theme-btn:hover { background: var(--accent-light); }
-
-    /* ═══════════════════════════════════════════════════
-       TABS
-    ═══════════════════════════════════════════════════ */
-    .tabs {
-      display: flex;
-      gap: 0.25rem;
-      padding: 1rem 1.5rem 0;
-      border-bottom: 2px solid var(--border);
-      overflow-x: auto;
-    }
-
-    .tab-btn {
-      background: none;
-      border: none;
-      border-bottom: 3px solid transparent;
-      padding: 0.6rem 1.2rem;
-      font-size: 0.9rem;
-      font-weight: 500;
-      color: var(--text-muted);
-      cursor: pointer;
-      white-space: nowrap;
-      transition: color 0.2s, border-color 0.2s;
-      margin-bottom: -2px;
-    }
-
-    .tab-btn:hover { color: var(--accent); }
-    .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
-
-    /* ═══════════════════════════════════════════════════
-       TAB PANELS
-    ═══════════════════════════════════════════════════ */
-    .tab-panel { display: none; padding: 1.5rem; }
-    .tab-panel.active { display: block; }
-
-    /* ═══════════════════════════════════════════════════
-       AKTUÁLNÍ HODNOTY — karty
-    ═══════════════════════════════════════════════════ */
-    .cards-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-      gap: 1rem;
-      margin-bottom: 1.5rem;
-    }
-
-    .card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 1.25rem;
-      transition: box-shadow 0.2s, transform 0.2s;
-      position: relative;
-      overflow: hidden;
-    }
-
-    .card:hover { box-shadow: 0 4px 20px rgba(0,0,0,0.1); transform: translateY(-2px); }
-
-    .card-icon {
-      font-size: 1.8rem;
-      margin-bottom: 0.5rem;
-      display: block;
-    }
-
-    .card-label {
-      font-size: 0.75rem;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      font-weight: 600;
-    }
-
-    .card-value {
-      font-size: 2.2rem;
-      font-weight: 700;
-      color: var(--text);
-      line-height: 1.1;
-      margin: 0.25rem 0;
-    }
-
-    .card-unit {
-      font-size: 1rem;
-      font-weight: 400;
-      color: var(--text-muted);
-    }
-
-    .card-sub {
-      font-size: 0.8rem;
-      color: var(--text-muted);
-      margin-top: 0.5rem;
-    }
-
-    /* Barvy karet */
-    .card-temp-out  { background: var(--card-temp); }
-    .card-hum-out   { background: var(--card-hum); }
-    .card-pressure  { background: var(--card-pres); }
-    .card-wind      { background: var(--card-wind); }
-    .card-rain      { background: var(--card-rain); }
-    .card-indoor    { background: var(--card-in); }
-
-    /* ═══════════════════════════════════════════════════
-       TIMESTAMP BAR
-    ═══════════════════════════════════════════════════ */
-    .timestamp-bar {
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 0.75rem 1rem;
-      font-size: 0.85rem;
-      color: var(--text-muted);
-      margin-bottom: 1.5rem;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      flex-wrap: wrap;
-    }
-
-    /* ═══════════════════════════════════════════════════
-       GRAFY
-    ═══════════════════════════════════════════════════ */
-    .chart-section {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 1.25rem;
-      margin-bottom: 1.25rem;
-    }
-
-    .chart-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 1rem;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-    }
-
-    .chart-title {
-      font-size: 1rem;
-      font-weight: 600;
-      color: var(--text);
-    }
-
-    .chart-range {
-      display: flex;
-      gap: 0.25rem;
-    }
-
-    .range-btn {
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 0.3rem 0.65rem;
-      font-size: 0.78rem;
-      cursor: pointer;
-      color: var(--text-muted);
-      transition: background 0.2s, color 0.2s;
-    }
-    .range-btn:hover { background: var(--accent-light); color: var(--accent); }
-    .range-btn.active {
-      background: var(--accent);
-      color: #fff;
-      border-color: var(--accent);
-    }
-
-    .chart-container {
-      position: relative;
-      height: 220px;
-    }
-
-    /* ═══════════════════════════════════════════════════
-       STATISTIKY
-    ═══════════════════════════════════════════════════ */
-    .stats-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-      gap: 1rem;
-    }
-
-    .stat-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 1.25rem;
-    }
-
-    .stat-card h3 {
-      font-size: 0.85rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: var(--text-muted);
-      margin-bottom: 1rem;
-      padding-bottom: 0.5rem;
-      border-bottom: 1px solid var(--border);
-    }
-
-    .stat-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 0.4rem 0;
-      border-bottom: 1px solid var(--border);
-      font-size: 0.88rem;
-    }
-    .stat-row:last-child { border-bottom: none; }
-    .stat-row .label { color: var(--text-muted); }
-    .stat-row .value { font-weight: 600; color: var(--text); }
-    .stat-row .value.hot  { color: var(--danger); }
-    .stat-row .value.cold { color: #3b82f6; }
-    .stat-row .value.wind { color: #a855f7; }
-
-    /* ═══════════════════════════════════════════════════
-       REKORDY
-    ═══════════════════════════════════════════════════ */
-    .records-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-      gap: 1rem;
-    }
-
-    .record-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 1.25rem;
-      text-align: center;
-    }
-
-    .record-icon { font-size: 2rem; margin-bottom: 0.5rem; }
-    .record-label { font-size: 0.78rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
-    .record-value { font-size: 2rem; font-weight: 800; margin: 0.4rem 0 0.2rem; }
-    .record-value.hot  { color: var(--danger); }
-    .record-value.cold { color: #3b82f6; }
-    .record-value.wind { color: #a855f7; }
-    .record-value.rain { color: #06b6d4; }
-    .record-value.pres { color: var(--accent); }
-    .record-count {
-      font-size: 0.8rem;
-      color: var(--text-muted);
-      margin-top: 0.75rem;
-      padding-top: 0.75rem;
-      border-top: 1px solid var(--border);
-    }
-
-    /* ═══════════════════════════════════════════════════
-       LOADING / ERROR STATES
-    ═══════════════════════════════════════════════════ */
-    .loading {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 3rem;
-      color: var(--text-muted);
-      gap: 0.75rem;
-    }
-
-    .spinner {
-      width: 24px;
-      height: 24px;
-      border: 3px solid var(--border);
-      border-top-color: var(--accent);
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
-
-    .error-box {
-      background: #fef2f2;
-      border: 1px solid #fecaca;
-      border-radius: 12px;
-      padding: 1rem 1.25rem;
-      color: #991b1b;
-      font-size: 0.88rem;
-      margin-bottom: 1rem;
-    }
-    [data-theme="dark"] .error-box {
-      background: #2d0a0a;
-      border-color: #7f1d1d;
-      color: #fca5a5;
-    }
-
-    /* ═══════════════════════════════════════════════════
-       WIND DIRECTION
-    ═══════════════════════════════════════════════════ */
-    .wind-arrow {
-      display: inline-block;
-      font-size: 1.4rem;
-      transition: transform 0.5s ease;
-    }
-
-    /* ═══════════════════════════════════════════════════
-       RESPONSIVE
-    ═══════════════════════════════════════════════════ */
-    @media (max-width: 640px) {
-      header { padding: 0.75rem 1rem; }
-      .tabs  { padding: 0.75rem 1rem 0; }
-      .tab-panel { padding: 1rem; }
-      .cards-grid { grid-template-columns: repeat(2, 1fr); }
-      .card-value { font-size: 1.7rem; }
-    }
-
-    @media (max-width: 400px) {
-      .cards-grid { grid-template-columns: 1fr; }
-    }
-  </style>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
@@ -471,7 +28,7 @@
   </header>
 
   <!-- ═══════════════════════════════════════════════════
-       TABS
+       ZÁLOŽKY
   ═══════════════════════════════════════════════════ -->
   <nav class="tabs" role="tablist">
     <button class="tab-btn active" data-tab="current"    role="tab">🌡️ Aktuálně</button>
@@ -481,7 +38,7 @@
   </nav>
 
   <!-- ═══════════════════════════════════════════════════
-       TAB: AKTUÁLNĚ
+       PANEL: AKTUÁLNĚ
   ═══════════════════════════════════════════════════ -->
   <div id="panel-current" class="tab-panel active">
     <div id="current-error" class="error-box" style="display:none;"></div>
@@ -492,16 +49,21 @@
       <span id="ts-age" style="margin-left:auto; color:var(--text-muted);"></span>
     </div>
 
-    <div class="cards-grid" id="current-cards">
+    <div class="cards-grid">
+
       <!-- Venkovní teplota -->
       <div class="card card-temp-out">
         <span class="card-icon">🌡️</span>
         <div class="card-label">Venkovní teplota</div>
         <div class="card-value"><span id="val-temp-out">—</span><span class="card-unit"> °C</span></div>
-        <div class="card-sub">Pocitová: <strong id="val-feels">—</strong> °C &nbsp;·&nbsp; Rosný bod: <strong id="val-dew">—</strong> °C</div>
+        <div class="card-sub">
+          Pocitová: <strong id="val-feels">—</strong> °C
+          &nbsp;·&nbsp;
+          Rosný bod: <strong id="val-dew">—</strong> °C
+        </div>
       </div>
 
-      <!-- Vnitřní teplota -->
+      <!-- Vnitřní teplota (WU API neposkytuje — zobrazí '—' pro live záznamy) -->
       <div class="card card-indoor">
         <span class="card-icon">🏠</span>
         <div class="card-label">Vnitřní teplota</div>
@@ -517,7 +79,7 @@
         <div class="card-sub" id="hum-desc"></div>
       </div>
 
-      <!-- Tlak -->
+      <!-- Atmosférický tlak -->
       <div class="card card-pressure">
         <span class="card-icon">🧭</span>
         <div class="card-label">Atmosférický tlak</div>
@@ -526,13 +88,15 @@
       </div>
 
       <!-- Vítr -->
-      <div class="card card-wind">
+      <div class="card card-wind-card">
         <span class="card-icon">💨</span>
         <div class="card-label">Vítr</div>
         <div class="card-value"><span id="val-wind-speed">—</span><span class="card-unit"> m/s</span></div>
         <div class="card-sub">
-          Nárazy: <strong id="val-wind-gust">—</strong> m/s &nbsp;·&nbsp;
-          <span class="wind-arrow" id="wind-arrow">➤</span> <span id="val-wind-dir-txt">—</span>
+          Nárazy: <strong id="val-wind-gust">—</strong> m/s
+          &nbsp;·&nbsp;
+          <span class="wind-arrow" id="wind-arrow">➤</span>
+          <span id="val-wind-dir-txt">—</span>
         </div>
       </div>
 
@@ -543,66 +107,51 @@
         <div class="card-value"><span id="val-rain-rate">—</span><span class="card-unit"> mm/h</span></div>
         <div class="card-sub">Celkem dnes: <strong id="val-rain-total">—</strong> mm</div>
       </div>
-    </div>
-  </div>
+
+    </div><!-- .cards-grid -->
+  </div><!-- #panel-current -->
 
   <!-- ═══════════════════════════════════════════════════
-       TAB: GRAFY
+       PANEL: GRAFY
   ═══════════════════════════════════════════════════ -->
   <div id="panel-charts" class="tab-panel">
     <div id="charts-error" class="error-box" style="display:none;"></div>
 
-    <!-- Rozsah grafů -->
     <div style="margin-bottom:1rem; display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
       <span style="font-size:0.85rem; color:var(--text-muted);">Zobrazit:</span>
       <button class="range-btn active" data-range="24h">Posledních 24 h</button>
-      <button class="range-btn" data-range="7d">7 dní</button>
-      <button class="range-btn" data-range="30d">30 dní</button>
+      <button class="range-btn"        data-range="7d">7 dní</button>
+      <button class="range-btn"        data-range="30d">30 dní</button>
     </div>
 
-    <!-- Teplota -->
     <div class="chart-section">
-      <div class="chart-header">
-        <span class="chart-title">🌡️ Teplota (°C)</span>
-      </div>
+      <div class="chart-header"><span class="chart-title">🌡️ Teplota (°C)</span></div>
       <div class="chart-container"><canvas id="chart-temp"></canvas></div>
     </div>
 
-    <!-- Vlhkost -->
     <div class="chart-section">
-      <div class="chart-header">
-        <span class="chart-title">💧 Vlhkost (%)</span>
-      </div>
+      <div class="chart-header"><span class="chart-title">💧 Vlhkost (%)</span></div>
       <div class="chart-container"><canvas id="chart-hum"></canvas></div>
     </div>
 
-    <!-- Tlak -->
     <div class="chart-section">
-      <div class="chart-header">
-        <span class="chart-title">🧭 Atmosférický tlak (hPa)</span>
-      </div>
+      <div class="chart-header"><span class="chart-title">🧭 Atmosférický tlak (hPa)</span></div>
       <div class="chart-container"><canvas id="chart-pres"></canvas></div>
     </div>
 
-    <!-- Vítr -->
     <div class="chart-section">
-      <div class="chart-header">
-        <span class="chart-title">💨 Vítr (m/s)</span>
-      </div>
+      <div class="chart-header"><span class="chart-title">💨 Vítr (m/s)</span></div>
       <div class="chart-container"><canvas id="chart-wind"></canvas></div>
     </div>
 
-    <!-- Srážky -->
     <div class="chart-section">
-      <div class="chart-header">
-        <span class="chart-title">🌧️ Intenzita srážek (mm/h)</span>
-      </div>
+      <div class="chart-header"><span class="chart-title">🌧️ Intenzita srážek (mm/h)</span></div>
       <div class="chart-container"><canvas id="chart-rain"></canvas></div>
     </div>
-  </div>
+  </div><!-- #panel-charts -->
 
   <!-- ═══════════════════════════════════════════════════
-       TAB: STATISTIKY
+       PANEL: STATISTIKY
   ═══════════════════════════════════════════════════ -->
   <div id="panel-statistics" class="tab-panel">
     <div id="stats-error" class="error-box" style="display:none;"></div>
@@ -612,7 +161,7 @@
   </div>
 
   <!-- ═══════════════════════════════════════════════════
-       TAB: REKORDY
+       PANEL: REKORDY
   ═══════════════════════════════════════════════════ -->
   <div id="panel-records" class="tab-panel">
     <div id="records-error" class="error-box" style="display:none;"></div>
@@ -622,481 +171,11 @@
   </div>
 
   <!-- ═══════════════════════════════════════════════════
-       JAVASCRIPT
+       SKRIPTY — načítány na konci pro rychlejší render
   ═══════════════════════════════════════════════════ -->
-  <script>
-  'use strict';
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+  <script src="app.js"></script>
 
-  // ── Konfigurace ──────────────────────────────────────────────────────────────
-  const API = 'https://stanice-worker.petmat247.workers.dev';
-  const REFRESH_MS = 60_000; // obnovovat každou minutu
-
-  // ── Stav ─────────────────────────────────────────────────────────────────────
-  let currentRange = '24h';
-  let charts = {};
-  let statsLoaded  = false;
-  let recordsLoaded = false;
-  let chartsLoaded = false;
-
-  // ── Pomocné funkce ────────────────────────────────────────────────────────────
-
-  /**
-   * Vrátí textový popis světové strany pro stupně větru.
-   */
-  function windDirText(deg) {
-    if (deg === null || deg === undefined) return '—';
-    const dirs = ['S','SSV','SV','VSV','V','VJV','JV','JJV','J','JJZ','JZ','ZJZ','Z','ZSZ','SZ','SSZ'];
-    return dirs[Math.round(deg / 22.5) % 16];
-  }
-
-  /**
-   * Natočení šipky větru (0° = sever nahoře, jde po směru).
-   * CSS transform: rotate() — šipka ➤ ukazuje vpravo = 0°,
-   * takže wind direction 0 (sever) = otočit o -90°.
-   */
-  function windArrowRotation(deg) {
-    return deg !== null ? `rotate(${deg - 90}deg)` : '';
-  }
-
-  function fmt(val, dec = 1) {
-    if (val === null || val === undefined) return '—';
-    return Number(val).toFixed(dec);
-  }
-
-  function fmt0(val) { return fmt(val, 0); }
-
-  /**
-   * Relativní čas od timestampu (před X minutami).
-   */
-  function relativeTime(unixTs) {
-    const diff = Math.floor(Date.now() / 1000) - unixTs;
-    if (diff < 5)  return 'právě teď';
-    if (diff < 60) return `před ${diff} s`;
-    const m = Math.round(diff / 60);
-    if (m < 60) return `před ${m} min`;
-    return `před ${Math.round(m / 60)} h`;
-  }
-
-  /**
-   * Formátuje Unix timestamp jako lokální čas.
-   */
-  function fmtTime(unixTs) {
-    const d = new Date(unixTs * 1000);
-    return d.toLocaleString('cs-CZ', {
-      day: '2-digit', month: '2-digit', year: 'numeric',
-      hour: '2-digit', minute: '2-digit',
-    });
-  }
-
-  /**
-   * Popis vlhkosti.
-   */
-  function humDesc(val) {
-    if (val === null) return '';
-    if (val < 30) return '🏜️ Velmi suchý vzduch';
-    if (val < 50) return '😊 Komfortní vlhkost';
-    if (val < 70) return '🌿 Mírně vlhký vzduch';
-    if (val < 85) return '💦 Vlhký vzduch';
-    return '🌫️ Velmi vlhký vzduch';
-  }
-
-  /**
-   * Popis tlaku.
-   */
-  function presDesc(val) {
-    if (val === null) return '';
-    if (val < 980)  return '⬇️ Nízký tlak – nestabilní počasí';
-    if (val < 1010) return '↔️ Podprůměrný tlak';
-    if (val < 1020) return '✅ Normální tlak';
-    if (val < 1030) return '☀️ Nadprůměrný tlak';
-    return '⬆️ Vysoký tlak – stabilní počasí';
-  }
-
-  // ── Nastavení/schéma Chart.js ─────────────────────────────────────────────────
-
-  function getChartColors() {
-    const dark = document.documentElement.getAttribute('data-theme') === 'dark';
-    return {
-      gridColor:  dark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)',
-      textColor:  dark ? '#94a3b8' : '#64748b',
-    };
-  }
-
-  function commonChartOptions(yLabel) {
-    const cc = getChartColors();
-    return {
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: { mode: 'index', intersect: false },
-      plugins: {
-        legend: {
-          labels: { color: cc.textColor, boxWidth: 12, font: { size: 12 } }
-        },
-        tooltip: { mode: 'index', intersect: false },
-      },
-      scales: {
-        x: {
-          type: 'time',
-          time: { tooltipFormat: 'dd.MM. HH:mm', displayFormats: { hour: 'HH:mm', day: 'dd.MM.' } },
-          grid: { color: cc.gridColor },
-          ticks: { color: cc.textColor, maxRotation: 0, maxTicksLimit: 8 },
-        },
-        y: {
-          title: { display: !!yLabel, text: yLabel, color: cc.textColor, font:{size:11} },
-          grid: { color: cc.gridColor },
-          ticks: { color: cc.textColor },
-        },
-      },
-    };
-  }
-
-  function createChart(id, datasets, yLabel) {
-    const ctx = document.getElementById(id).getContext('2d');
-    if (charts[id]) charts[id].destroy();
-    charts[id] = new Chart(ctx, {
-      type: 'line',
-      data: { datasets },
-      options: commonChartOptions(yLabel),
-    });
-    return charts[id];
-  }
-
-  // ── Aktuální data ─────────────────────────────────────────────────────────────
-
-  async function loadCurrent() {
-    try {
-      const res  = await fetch(`${API}/api/current`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-
-      // Timestamp
-      document.getElementById('ts-display').textContent = fmtTime(data.timestamp);
-      document.getElementById('ts-age').textContent     = relativeTime(data.timestamp);
-
-      // Teploty
-      document.getElementById('val-temp-out').textContent = fmt(data.temp_out);
-      document.getElementById('val-feels').textContent    = fmt(data.feels_like);
-      document.getElementById('val-dew').textContent      = fmt(data.dew_point);
-      document.getElementById('val-temp-in').textContent  = data.temp_in !== null ? fmt(data.temp_in) : '—';
-      document.getElementById('val-hum-in').textContent   = data.humidity_in !== null ? fmt0(data.humidity_in) : '—';
-
-      // Vlhkost
-      document.getElementById('val-hum-out').textContent = fmt0(data.humidity_out);
-      document.getElementById('hum-desc').textContent    = humDesc(data.humidity_out);
-
-      // Tlak
-      document.getElementById('val-pressure').textContent = fmt(data.pressure);
-      document.getElementById('pres-desc').textContent    = presDesc(data.pressure);
-
-      // Vítr
-      document.getElementById('val-wind-speed').textContent = fmt(data.wind_speed);
-      document.getElementById('val-wind-gust').textContent  = fmt(data.wind_gust);
-      document.getElementById('val-wind-dir-txt').textContent = windDirText(data.wind_dir);
-      document.getElementById('wind-arrow').style.transform  = windArrowRotation(data.wind_dir);
-
-      // Srážky
-      document.getElementById('val-rain-rate').textContent  = fmt(data.rain_rate);
-      document.getElementById('val-rain-total').textContent = fmt(data.rain_total);
-
-      // Status
-      setStatus('online', `Online · ${relativeTime(data.timestamp)}`);
-      document.getElementById('current-error').style.display = 'none';
-    } catch (e) {
-      setStatus('error', 'Chyba připojení');
-      document.getElementById('current-error').style.display = 'block';
-      document.getElementById('current-error').textContent = `Nepodařilo se načíst aktuální data: ${e.message}`;
-    }
-  }
-
-  // ── Grafy ─────────────────────────────────────────────────────────────────────
-
-  function rangeToSeconds(range) {
-    return { '24h': 86400, '7d': 7 * 86400, '30d': 30 * 86400 }[range] ?? 86400;
-  }
-
-  function rangeToLimit(range) {
-    // 24h po minutě = 1440, 7d po 10 min = 1008, 30d po 30 min = 1440
-    return { '24h': 1440, '7d': 1008, '30d': 1440 }[range] ?? 1440;
-  }
-
-  async function loadCharts(range) {
-    const now  = Math.floor(Date.now() / 1000);
-    const from = now - rangeToSeconds(range);
-    const lim  = rangeToLimit(range);
-
-    try {
-      const res = await fetch(`${API}/api/history?from=${from}&to=${now}&limit=${lim}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
-      const rows = json.data ?? [];
-
-      if (!rows.length) {
-        document.getElementById('charts-error').style.display = 'block';
-        document.getElementById('charts-error').textContent = 'Žádná historická data pro tento rozsah.';
-        return;
-      }
-      document.getElementById('charts-error').style.display = 'none';
-
-      // Zpracování dat
-      const ts    = rows.map(r => r.timestamp * 1000);
-      const cc    = getChartColors();
-
-      const lineStyle = (color, label, key) => ({
-        label,
-        data: rows.map(r => ({ x: r.timestamp * 1000, y: r[key] })),
-        borderColor: color,
-        backgroundColor: color.replace('1)', '0.1)'),
-        borderWidth: range === '30d' ? 1.5 : 1.8,
-        pointRadius: 0,
-        tension: 0.3,
-        fill: false,
-      });
-
-      // Teplota
-      createChart('chart-temp', [
-        lineStyle('rgba(239,68,68,1)',   'Venkovní (°C)',  'temp_out'),
-        lineStyle('rgba(249,115,22,0.8)', 'Pocitová (°C)', 'feels_like'),
-        lineStyle('rgba(59,130,246,0.7)', 'Rosný bod (°C)','dew_point'),
-      ], '°C');
-
-      // Vlhkost
-      createChart('chart-hum', [
-        lineStyle('rgba(34,197,94,1)', 'Venkovní vlhkost (%)', 'humidity_out'),
-      ], '%');
-
-      // Tlak
-      createChart('chart-pres', [
-        lineStyle('rgba(59,130,246,1)', 'Tlak (hPa)', 'pressure'),
-      ], 'hPa');
-
-      // Vítr
-      createChart('chart-wind', [
-        lineStyle('rgba(168,85,247,1)',   'Průměrná rychlost (m/s)', 'wind_speed'),
-        lineStyle('rgba(249,115,22,0.8)', 'Nárazy (m/s)',            'wind_gust'),
-      ], 'm/s');
-
-      // Srážky
-      createChart('chart-rain', [
-        {
-          label: 'Intenzita srážek (mm/h)',
-          data: rows.map(r => ({ x: r.timestamp * 1000, y: r.rain_rate })),
-          borderColor: 'rgba(6,182,212,1)',
-          backgroundColor: 'rgba(6,182,212,0.25)',
-          borderWidth: 1.5,
-          pointRadius: 0,
-          fill: true,
-          tension: 0.2,
-        }
-      ], 'mm/h');
-
-      chartsLoaded = true;
-    } catch (e) {
-      document.getElementById('charts-error').style.display = 'block';
-      document.getElementById('charts-error').textContent = `Nepodařilo se načíst data pro grafy: ${e.message}`;
-    }
-  }
-
-  // ── Statistiky ────────────────────────────────────────────────────────────────
-
-  async function loadStats() {
-    const grid = document.getElementById('stats-grid');
-    try {
-      const res = await fetch(`${API}/api/stats`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const s = await res.json();
-
-      function statCard(title, period) {
-        if (!period) return '';
-        return `
-          <div class="stat-card">
-            <h3>${title}</h3>
-            <div class="stat-row"><span class="label">Průměrná teplota</span>
-              <span class="value">${fmt(period.avg_temp)} °C</span></div>
-            <div class="stat-row"><span class="label">Max. teplota</span>
-              <span class="value hot">${fmt(period.max_temp)} °C</span></div>
-            <div class="stat-row"><span class="label">Min. teplota</span>
-              <span class="value cold">${fmt(period.min_temp)} °C</span></div>
-            <div class="stat-row"><span class="label">Průměrná vlhkost</span>
-              <span class="value">${fmt0(period.avg_hum)} %</span></div>
-            <div class="stat-row"><span class="label">Max. náraz větru</span>
-              <span class="value wind">${fmt(period.max_gust)} m/s</span></div>
-            <div class="stat-row"><span class="label">Počet záznamů</span>
-              <span class="value">${period.records}</span></div>
-          </div>`;
-      }
-
-      grid.innerHTML = statCard('📅 Posledních 24 hodin', s.last_24h)
-                     + statCard('📅 Posledních 7 dní',    s.last_7d)
-                     + statCard('📅 Posledních 30 dní',   s.last_30d);
-
-      document.getElementById('stats-error').style.display = 'none';
-      statsLoaded = true;
-    } catch (e) {
-      grid.innerHTML = '';
-      document.getElementById('stats-error').style.display = 'block';
-      document.getElementById('stats-error').textContent = `Nepodařilo se načíst statistiky: ${e.message}`;
-    }
-  }
-
-  // ── Rekordy ──────────────────────────────────────────────────────────────────
-
-  async function loadRecords() {
-    const grid = document.getElementById('records-grid');
-    try {
-      const res = await fetch(`${API}/api/records`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const r = await res.json();
-
-      grid.innerHTML = `
-        <div class="record-card">
-          <div class="record-icon">🌡️</div>
-          <div class="record-label">Nejvyšší teplota</div>
-          <div class="record-value hot">${fmt(r.temp_max)} °C</div>
-        </div>
-        <div class="record-card">
-          <div class="record-icon">🥶</div>
-          <div class="record-label">Nejnižší teplota</div>
-          <div class="record-value cold">${fmt(r.temp_min)} °C</div>
-        </div>
-        <div class="record-card">
-          <div class="record-icon">💨</div>
-          <div class="record-label">Nejsilnější náraz větru</div>
-          <div class="record-value wind">${fmt(r.wind_gust_max)} m/s</div>
-        </div>
-        <div class="record-card">
-          <div class="record-icon">🌧️</div>
-          <div class="record-label">Max. intenzita srážek</div>
-          <div class="record-value rain">${fmt(r.rain_rate_max)} mm/h</div>
-        </div>
-        <div class="record-card">
-          <div class="record-icon">🌊</div>
-          <div class="record-label">Max. celkové srážky</div>
-          <div class="record-value rain">${fmt(r.rain_total_max)} mm</div>
-        </div>
-        <div class="record-card">
-          <div class="record-icon">⬆️</div>
-          <div class="record-label">Nejvyšší tlak</div>
-          <div class="record-value pres">${fmt(r.pressure_max)} hPa</div>
-        </div>
-        <div class="record-card">
-          <div class="record-icon">⬇️</div>
-          <div class="record-label">Nejnižší tlak</div>
-          <div class="record-value pres">${fmt(r.pressure_min)} hPa</div>
-        </div>
-        <div class="record-card">
-          <div class="record-icon">💧</div>
-          <div class="record-label">Nejvyšší vlhkost</div>
-          <div class="record-value" style="color:var(--chart-hum)">${fmt0(r.humidity_max)} %</div>
-        </div>
-        <div class="record-card" style="grid-column: 1 / -1; text-align:center; background:var(--surface2);">
-          <div class="record-icon">📚</div>
-          <div class="record-label">Celkový počet záznamů</div>
-          <div class="record-value" style="font-size:1.6rem; color:var(--accent)">${r.total_records?.toLocaleString('cs-CZ') ?? '—'}</div>
-          <div class="record-count">
-            Data od ${r.oldest_record ? r.oldest_record.slice(0,10) : '?'} do ${r.newest_record ? r.newest_record.slice(0,10) : '?'} (UTC)
-          </div>
-        </div>`;
-
-      document.getElementById('records-error').style.display = 'none';
-      recordsLoaded = true;
-    } catch (e) {
-      grid.innerHTML = '';
-      document.getElementById('records-error').style.display = 'block';
-      document.getElementById('records-error').textContent = `Nepodařilo se načíst rekordy: ${e.message}`;
-    }
-  }
-
-  // ── Status ────────────────────────────────────────────────────────────────────
-
-  function setStatus(type, text) {
-    const dot  = document.getElementById('status-dot');
-    const span = document.getElementById('status-text');
-    dot.className = `status-dot ${type}`;
-    span.textContent = text;
-  }
-
-  // ── Tmavý/světlý režim ────────────────────────────────────────────────────────
-
-  function initTheme() {
-    const saved = localStorage.getItem('theme');
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    const theme = saved ?? (prefersDark ? 'dark' : 'light');
-    applyTheme(theme);
-  }
-
-  function applyTheme(theme) {
-    document.documentElement.setAttribute('data-theme', theme);
-    document.getElementById('theme-toggle').textContent = theme === 'dark' ? '☀️' : '🌙';
-    localStorage.setItem('theme', theme);
-    // Přerenderuj grafy se správnými barvami
-    Object.values(charts).forEach(c => {
-      const cc = getChartColors();
-      c.options.scales.x.grid.color = cc.gridColor;
-      c.options.scales.x.ticks.color = cc.textColor;
-      c.options.scales.y.grid.color = cc.gridColor;
-      c.options.scales.y.ticks.color = cc.textColor;
-      c.options.plugins.legend.labels.color = cc.textColor;
-      c.update();
-    });
-  }
-
-  document.getElementById('theme-toggle').addEventListener('click', () => {
-    const current = document.documentElement.getAttribute('data-theme');
-    applyTheme(current === 'dark' ? 'light' : 'dark');
-  });
-
-  // ── Záložky (tabs) ────────────────────────────────────────────────────────────
-
-  document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const tab = btn.dataset.tab;
-
-      // Aktivuj tlačítko a panel
-      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-      btn.classList.add('active');
-      document.getElementById(`panel-${tab}`).classList.add('active');
-
-      // Lazy load
-      if (tab === 'charts' && !chartsLoaded) loadCharts(currentRange);
-      if (tab === 'statistics' && !statsLoaded) loadStats();
-      if (tab === 'records' && !recordsLoaded) loadRecords();
-    });
-  });
-
-  // ── Přepínání rozsahu grafů ───────────────────────────────────────────────────
-
-  document.querySelectorAll('.range-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.range-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      currentRange = btn.dataset.range;
-      chartsLoaded = false;
-      loadCharts(currentRange);
-    });
-  });
-
-  // ── Automatická obnova ────────────────────────────────────────────────────────
-
-  function startAutoRefresh() {
-    setInterval(() => {
-      loadCurrent();
-      // Obnov i grafy pokud jsou aktivní
-      const activeTab = document.querySelector('.tab-btn.active')?.dataset.tab;
-      if (activeTab === 'charts') {
-        chartsLoaded = false;
-        loadCharts(currentRange);
-      }
-      // Aktualizuj relativní čas
-      const ts = document.getElementById('ts-display').textContent;
-    }, REFRESH_MS);
-  }
-
-  // ── Inicializace ──────────────────────────────────────────────────────────────
-
-  initTheme();
-  loadCurrent();
-  startAutoRefresh();
-  </script>
 </body>
 </html>
