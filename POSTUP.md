@@ -68,41 +68,35 @@ Frontend — GitHub Pages (dashboard s grafy)
 - [x] Doimportována data za **září 2026** (4 294 záznamů) a **říjen 2026** (105 záznamů)
 - [x] Databáze obsahuje celkem **~16 987 záznamů** (+ roste každou minutu)
 
+### Chat 4 — GitHub + Pages + CORS (2. října 2026)
+- [x] Vytvořen `.gitignore` (vylučuje `node_modules/`, `.DS_Store`, `.wrangler/`, Word temp soubory)
+- [x] Inicializován git repozitář (`git init`)
+- [x] Vytvořen placeholder frontend `docs/index.html`
+  - Tmavý design, zobrazuje stav systému (backend ✅, frontend 🚧)
+  - Bude nahrazen plným dashboardem v Kroku C
+- [x] Vytvořen repozitář na GitHubu: [petmat247-cloud/WeatherStation](https://github.com/petmat247-cloud/WeatherStation)
+- [x] Kód pushnut na GitHub (`git push -u origin main`)
+- [x] Zapnuty **GitHub Pages** ze složky `/docs` na větvi `main`
+  - Živá URL: `https://petmat247-cloud.github.io/WeatherStation/`
+- [x] Aktualizován CORS v `worker/wrangler.toml`
+  - `ALLOWED_ORIGIN = "https://petmat247-cloud.github.io"`
+- [x] Worker znovu nasazen s novým CORS (`npx wrangler deploy`)
+- [x] Proveden kompletní **bezpečnostní audit** repozitáře
+  - Výsledek: BEZPEČNÉ ✅ — žádné API klíče, čistá git historie, SQL injection chráněno
+  - Dokumentace uložena lokálně: `docs/Bezpecnostni_audit_Stanice.docx`
+- [x] VS Code nastaven pro přímý push na GitHub (Source Control panel)
+
 ---
 
-## 🔜 CO ZBÝVÁ (v tomto pořadí)
+## 🔜 CO ZBÝVÁ
 
-### Krok A — GitHub repozitář + Pages
-1. Vytvoř nový repozitář na github.com (např. `stanice`)
-2. Inicializuj git a nahraj projekt:
-   ```bash
-   cd ~/Desktop/Stanice
-   git init
-   git add .
-   git commit -m "init: backend hotov, worker nasazen"
-   git remote add origin https://github.com/petmat247/stanice.git
-   git push -u origin main
-   ```
-3. V nastavení repozitáře zapni **GitHub Pages** (ze složky `/frontend`)
-4. Zkopíruj výslednou URL (např. `https://petmat247.github.io/stanice`)
-
-### Krok B — Aktualizovat CORS ve Workeru
-Po získání GitHub Pages URL:
-1. Uprav v `worker/wrangler.toml` řádek:
-   ```toml
-   ALLOWED_ORIGIN = "https://petmat247.github.io"
-   ```
-2. Znovu nasaď Worker:
-   ```bash
-   npx wrangler deploy --config worker/wrangler.toml
-   ```
-
-### Krok C — Frontend dashboard
-Vytvořit `frontend/index.html` s:
+### Krok C — Frontend dashboard ← DALŠÍ NA ŘADĚ
+Vytvořit `docs/index.html` (nahradí placeholder) s:
 - Aktuální hodnoty (teplota, vlhkost, tlak, vítr, déšť)
-- Grafy historie (Chart.js)
+- Grafy historie (Chart.js nebo podobná knihovna)
 - Denní rekordy a statistiky
 - Vše napojeno na REST API Workeru (`stanice-worker.petmat247.workers.dev`)
+- Workflow: upravit ve VS Code → Commit & Push → GitHub Pages se aktualizuje za ~30s
 
 ### Krok D — Průběžný import nových CSV
 Každý měsíc stáhnout CSV ze Weathercloudu do `Tabulky/` a spustit:
@@ -119,6 +113,7 @@ Duplicity se automaticky přeskočí (`INSERT OR IGNORE`).
 Stanice/
 ├── POSTUP.md                        ← tento soubor
 ├── README.md                        ← specifikace projektu
+├── .gitignore                       ← vylučuje node_modules, temp soubory ✅
 ├── Tabulky/
 │   ├── Weathercloud ... 2026-05.csv
 │   ├── Weathercloud ... 2026-06.csv
@@ -133,10 +128,11 @@ Stanice/
 │       └── index.js                 ← kód Workeru (cron + REST API) ✅
 ├── scripts/
 │   └── import_weathercloud.js       ← import CSV → D1 ✅
-├── frontend/                        ← zatím prázdné (Krok C)
-│   └── index.html
+├── frontend/
+│   └── index.html                   ← záloha placeholderu
 └── docs/
-    └── checklist-doma.md
+    ├── index.html                   ← GitHub Pages (placeholder) ✅
+    └── Bezpecnostni_audit_Stanice.docx  ← lokální dokument (není na GitHubu)
 ```
 
 ---
@@ -146,7 +142,7 @@ Stanice/
 | Oblast | Ochrana |
 |--------|---------|
 | API klíče | Cloudflare Secrets — nikdy v kódu ani na GitHubu |
-| CORS | Pouze GitHub Pages doména, žádné wildcard `*` |
+| CORS | Pouze `petmat247-cloud.github.io`, žádné wildcard `*` |
 | SQL injection | Parametrizované dotazy (`?` bindování) |
 | Vstupní validace | Všechny URL parametry ověřeny |
 | Chybové zprávy | Nikdy neodhalí interní chyby |
@@ -164,6 +160,8 @@ Stanice/
 | database_id | `2ca5d340-b444-4083-b85d-18d0150efc62` |
 | Worker název | `stanice-worker` |
 | Worker URL | `https://stanice-worker.petmat247.workers.dev` |
+| GitHub repozitář | `https://github.com/petmat247-cloud/WeatherStation` |
+| GitHub Pages URL | `https://petmat247-cloud.github.io/WeatherStation/` |
 | Cron interval | každou minutu (`* * * * *`) |
 | WU API | `api.weather.com/v2/pws/observations/current` |
 | Jednotky | metrické (°C, m/s, hPa, mm) |

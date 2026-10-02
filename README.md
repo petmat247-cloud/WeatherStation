@@ -127,13 +127,23 @@ Tento systém je navržen tak, aby i při frekvenci 1 minuty bezpečně fungoval
 
 ---
 
+## 🔗 Živé odkazy
+
+| Co | URL |
+|----|-----|
+| **GitHub repozitář** | [github.com/petmat247-cloud/WeatherStation](https://github.com/petmat247-cloud/WeatherStation) |
+| **GitHub Pages (frontend)** | [petmat247-cloud.github.io/WeatherStation](https://petmat247-cloud.github.io/WeatherStation/) |
+| **Worker API** | [stanice-worker.petmat247.workers.dev/api/current](https://stanice-worker.petmat247.workers.dev/api/current) |
+
+---
+
 ## 📁 Struktura repozitáře
 
 ```
 Stanice/
 │
-├── frontend/                  # Statická webová stránka (GitHub Pages) — připravuje se
-│   └── index.html
+├── docs/                      # GitHub Pages (frontend) — nasazeno ✅
+│   └── index.html             # Placeholder — bude nahrazen plným dashboardem
 │
 ├── worker/                    # Cloudflare Worker (backend) — nasazeno ✅
 │   ├── src/
@@ -152,14 +162,12 @@ Stanice/
 │   ├── Weathercloud ... 2026-09.csv
 │   └── Weathercloud ... 2026-10.csv
 │
-├── docs/                      # Návody
-│   └── checklist-doma.md
-│
+├── .gitignore                 # Vylučuje node_modules, temp soubory
 ├── POSTUP.md                  # Deník projektu — co je hotovo, co zbývá
 └── README.md                  # Tento dokument
 ```
 
 ---
 
-*Poslední aktualizace: říjen 2026 — Worker nasazen, live data běží, databáze ~16 987 záznamů*
+*Poslední aktualizace: říjen 2026 — Worker nasazen, GitHub Pages živé, databáze ~16 987 záznamů a roste*
 
