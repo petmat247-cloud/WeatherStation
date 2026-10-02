@@ -468,9 +468,11 @@ async function fetchFromWeathercloud(deviceId, cookie) {
       const rawTempIn = data.tempin;
       const rawHumIn  = data.humin;
 
-      const tempIn = (rawTempIn !== null && rawTempIn !== '' && rawTempIn !== undefined)
-        ? parseFloat(rawTempIn) / 10
-        : null;
+      let tempIn = null;
+      if (rawTempIn !== null && rawTempIn !== '' && rawTempIn !== undefined) {
+        const val = parseFloat(rawTempIn);
+        tempIn = Math.abs(val) > 50 ? Math.round((val / 10) * 10) / 10 : Math.round(val * 10) / 10;
+      }
 
       const humIn = (rawHumIn !== null && rawHumIn !== '' && rawHumIn !== undefined)
         ? parseInt(rawHumIn, 10)
@@ -487,7 +489,7 @@ async function fetchFromWeathercloud(deviceId, cookie) {
 
 /**
  * Doplní (UPDATE) indoor teplotu a vlhkost do záznamů v D1.
- * Aktualizuje všechny záznamy z posledních 2 hodin, kde chybí temp_in.
+ * Aktualizuje záznamy z posledních 2 hodin.
  */
 async function updateIndoorData(db, tempIn, humIn) {
   const cutoff = Math.floor(Date.now() / 1000) - 2 * 3600; // posledních 2 hodiny
@@ -497,7 +499,6 @@ async function updateIndoorData(db, tempIn, humIn) {
     SET    temp_in = ?, humidity_in = ?
     WHERE  source = 'wunderground'
       AND  timestamp >= ?
-      AND  temp_in IS NULL
   `).bind(tempIn, humIn, cutoff).run();
 
   return result;
@@ -570,8 +571,11 @@ async function handleTestWeathercloud(env, corsHdrs) {
       if (parsed && (parsed.tempin !== undefined || parsed.humin !== undefined)) {
         const rawTempIn = parsed.tempin;
         const rawHumIn  = parsed.humin;
-        const tempIn = (rawTempIn !== null && rawTempIn !== '' && rawTempIn !== undefined)
-          ? parseFloat(rawTempIn) / 10 : null;
+        let tempIn = null;
+        if (rawTempIn !== null && rawTempIn !== '' && rawTempIn !== undefined) {
+          const val = parseFloat(rawTempIn);
+          tempIn = Math.abs(val) > 50 ? Math.round((val / 10) * 10) / 10 : Math.round(val * 10) / 10;
+        }
         const humIn = (rawHumIn !== null && rawHumIn !== '' && rawHumIn !== undefined)
           ? parseInt(rawHumIn, 10) : null;
 
