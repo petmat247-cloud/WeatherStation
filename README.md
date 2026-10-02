@@ -19,7 +19,7 @@ Vzhledem k tomu, že použitý hardware stanice nepodporuje přímé odesílán�
 
 ## 📊 Sledované meteorologické hodnoty (Sencor SWS 9898)
 
-Na základě analýzy reálných dat ze stanice budeme uchovávat tyto naměřené hodnoty (stanice **nemá** UV senzor ani senzor solárního záření, a logujeme obě hodnoty teploty a vlhkosti):
+Na základě analýzy reálných dat ze stanice uchováváme tyto naměřené hodnoty (stanice **nemá** UV senzor ani senzor solárního záření, a logujeme obě hodnoty teploty a vlhkosti):
 
 | Kategorie | Hodnoty |
 |-----------|---------|
@@ -29,6 +29,8 @@ Na základě analýzy reálných dat ze stanice budeme uchovávat tyto naměřen
 | **Vítr** | Průměrná rychlost větru (m/s), nárazy větru (gust - m/s), směr větru (°) |
 | **Srážky** | Úhrn srážek (mm), intenzita srážek (mm/h) |
 | **Čas** | Přesný timestamp každého záznamu (UTC) |
+
+> **Poznámka:** Weather Underground API neposkytuje indoor data (vnitřní teplota a vlhkost) — pro live záznamy jsou tyto hodnoty `null`. Historická data z Weathercloudu (před říjnem 2026) indoor hodnoty obsahují.
 
 ---
 
@@ -95,6 +97,24 @@ CREATE TABLE IF NOT EXISTS measurements (
 CREATE INDEX IF NOT EXISTS idx_measurements_timestamp ON measurements (timestamp);
 ```
 
+---
+
+## 🖥️ Frontend dashboard — nasazeno ✅
+
+Plný meteorologický dashboard na **GitHub Pages** se skládá ze 3 souborů:
+
+| Soubor | Obsah |
+|--------|-------|
+| `docs/index.html` | HTML kostra stránky |
+| `docs/style.css` | Styly + světlý/tmavý režim |
+| `docs/app.js` | Veškerá logika — API volání, Chart.js grafy, záložky |
+
+### Záložky dashboardu:
+
+- **🌡️ Aktuálně** — 6 karet s živými hodnotami (teplota, vlhkost, tlak, vítr, srážky), automatická obnova každou minutu
+- **📈 Grafy** — 5 grafů (teplota se 3 křivkami, vlhkost, tlak, vítr, srážky), přepínání rozsahu 24h / 7d / 30d
+- **📊 Statistiky** — min/max/průměr za 24h, 7 a 30 dní
+- **🏆 Rekordy** — absolutní rekordy ze všech ~17 000+ naměřených dat
 
 ---
 
@@ -114,7 +134,7 @@ Tento systém je navržen tak, aby i při frekvenci 1 minuty bezpečně fungoval
 *   **Limit zápisu (Writes):** 100 000 řádků / den. Využíváme 1 440 řádků (cca 1,4 %).
 *   **Limit úložiště (Storage):** 5 GB. Rok běhu (při zápisu po minutě) spotřebuje cca 100 MB. Vydrží desetiletí.
 *   **Limit čtení (Reads) - NEJKRITIČTĚJŠÍ:** 5 milionů *prohledaných* (nikoliv vrácených) řádků denně.
-    *   **Ochrana 1 (SQL Indexy):** Tabulka má primární index nad sloupcem `timestamp`. Dotazy pro frontend nesmí nikdy způsobit *full table scan* (procházení celé tabulky), jinak se denní limit vyčerpá po pár načteních stránky s historií.
+    *   **Ochrana 1 (SQL Indexy):** Tabulka má primární index nad sloupcem `timestamp`. Dotazy pro frontend nesmí nikdy způsobit *full table scan*.
     *   **Ochrana 2 (Worker Cache):** Cloudflare Worker cachuje API odpovědi pro frontend, aby 5 rychlých obnovení stránky znamenalo jen 1 dotaz do databáze.
 
 ---
@@ -143,7 +163,9 @@ Tento systém je navržen tak, aby i při frekvenci 1 minuty bezpečně fungoval
 Stanice/
 │
 ├── docs/                      # GitHub Pages (frontend) — nasazeno ✅
-│   └── index.html             # Placeholder — bude nahrazen plným dashboardem
+│   ├── index.html             # HTML kostra dashboardu
+│   ├── style.css              # Styly + light/dark theme
+│   └── app.js                 # Logika, API volání, Chart.js grafy
 │
 ├── worker/                    # Cloudflare Worker (backend) — nasazeno ✅
 │   ├── src/
@@ -169,5 +191,4 @@ Stanice/
 
 ---
 
-*Poslední aktualizace: říjen 2026 — Worker nasazen, GitHub Pages živé, databáze ~16 987 záznamů a roste*
-
+*Poslední aktualizace: říjen 2026 — systém plně funkční, dashboard živý, databáze ~17 000+ záznamů a roste*

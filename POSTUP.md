@@ -26,7 +26,7 @@ Frontend — GitHub Pages (dashboard s grafy)
 
 ---
 
-## ✅ HOTOVO
+## ✅ VŠE HOTOVO 🎉
 
 ### Chat 1 — Analýza a plánování (září 2026)
 - [x] Analyzována stanice Sencor SWS 9898 (nemá UV/solar, má indoor senzor)
@@ -66,14 +66,11 @@ Frontend — GitHub Pages (dashboard s grafy)
 - [x] Ověřena funkčnost REST API v prohlížeči (`/api/current` vrací JSON) ✅
 - [x] Živá data z WU se ukládají do D1 každou minutu ✅
 - [x] Doimportována data za **září 2026** (4 294 záznamů) a **říjen 2026** (105 záznamů)
-- [x] Databáze obsahuje celkem **~16 987 záznamů** (+ roste každou minutu)
+- [x] Databáze obsahuje celkem **~17 000+ záznamů** (+ roste každou minutu)
 
 ### Chat 4 — GitHub + Pages + CORS (2. října 2026)
 - [x] Vytvořen `.gitignore` (vylučuje `node_modules/`, `.DS_Store`, `.wrangler/`, Word temp soubory)
 - [x] Inicializován git repozitář (`git init`)
-- [x] Vytvořen placeholder frontend `docs/index.html`
-  - Tmavý design, zobrazuje stav systému (backend ✅, frontend 🚧)
-  - Bude nahrazen plným dashboardem v Kroku C
 - [x] Vytvořen repozitář na GitHubu: [petmat247-cloud/WeatherStation](https://github.com/petmat247-cloud/WeatherStation)
 - [x] Kód pushnut na GitHub (`git push -u origin main`)
 - [x] Zapnuty **GitHub Pages** ze složky `/docs` na větvi `main`
@@ -86,36 +83,35 @@ Frontend — GitHub Pages (dashboard s grafy)
   - Dokumentace uložena lokálně: `docs/Bezpecnostni_audit_Stanice.docx`
 - [x] VS Code nastaven pro přímý push na GitHub (Source Control panel)
 
----
-
-## ✅ HOTOVO (pokračování)
-
 ### Chat 5 — Frontend dashboard (2. října 2026)
-- [x] Vytvořen kompletní `docs/index.html` — nahrazuje placeholder
+- [x] Vytvořen kompletní frontend dashboard — nahrazuje placeholder
+  - Rozděleno do 3 souborů: `index.html` + `style.css` + `app.js`
   - Záložková struktura: Aktuálně / Grafy / Statistiky / Rekordy
   - Světlý + tmavý režim (auto-detect + manuální přepínání, uložení do localStorage)
   - **Aktuálně:** 6 karet (venkovní teplota, vnitřní teplota, vlhkost, tlak, vítr, srážky)
-  - Pocitová teplota, rosný bod, popis vlhkosti a tlaku, šipka směru větru
-  - **Grafy:** 5 grafů s Chart.js — teplota, vlhkost, tlak, vítr, srážky
-  - Přepínání rozsahu: 24h / 7 dní / 30 dní
-  - **Statistiky:** 24h / 7d / 30d (avg/max/min teplota, vlhkost, vítr, záznamy)
+  - Pocitová teplota, rosný bod, popis vlhkosti a tlaku, otáčecí šipka směru větru
+  - **Grafy:** 5 grafů s Chart.js — teplota (3 křivky), vlhkost, tlak, vítr, srážky
+  - Přepínání rozsahu grafů: 24h / 7 dní / 30 dní
+  - **Statistiky:** 24h / 7d / 30d (avg/max/min teplota, vlhkost, vítr, počet záznamů)
   - **Rekordy:** absolutní rekordy ze všech ~17 000+ záznamů
   - Automatická obnova každou minutu
-  - Responzivní design (funguje na mobilu)
-- [x] Pushnut na GitHub → GitHub Pages živé a aktuální
+  - Responzivní design (funguje na mobilu i desktopu)
+- [x] Pushnut na GitHub → GitHub Pages živé ✅
 
 ---
 
 ## 🔜 CO ZBÝVÁ
 
-### Krok C — Frontend dashboard ✅ HOTOVO
-
-### Krok D — Průběžný import nových CSV
+### Průběžná údržba — Import nových CSV
 Každý měsíc stáhnout CSV ze Weathercloudu do `Tabulky/` a spustit:
 ```bash
 node scripts/import_weathercloud.js
 ```
 Duplicity se automaticky přeskočí (`INSERT OR IGNORE`).
+
+### Volitelná vylepšení do budoucna
+- Úpravy designu dashboardu dle potřeby
+- Případné rozšíření o další grafy nebo pohledy
 
 ---
 
@@ -141,10 +137,11 @@ Stanice/
 ├── scripts/
 │   └── import_weathercloud.js       ← import CSV → D1 ✅
 ├── frontend/
-│   └── index.html                   ← záloha placeholderu
-└── docs/
-    ├── index.html                   ← GitHub Pages (placeholder) ✅
-    └── Bezpecnostni_audit_Stanice.docx  ← lokální dokument (není na GitHubu)
+│   └── index.html                   ← záloha starého placeholderu
+└── docs/                            ← GitHub Pages (frontend) ✅
+    ├── index.html                   ← HTML kostra dashboardu ✅
+    ├── style.css                    ← styly + light/dark theme ✅
+    └── app.js                       ← logika, API volání, grafy ✅
 ```
 
 ---
@@ -178,5 +175,5 @@ Stanice/
 | WU API | `api.weather.com/v2/pws/observations/current` |
 | Jednotky | metrické (°C, m/s, hPa, mm) |
 | Timestamp v DB | Unix UTC (celá čísla sekund) |
-| Historická data | ~16 987 záznamů, květen–říjen 2026 |
+| Historická data | ~17 000+ záznamů, květen–říjen 2026 |
 | Live data od | 2. října 2026, roste každou minutu |
