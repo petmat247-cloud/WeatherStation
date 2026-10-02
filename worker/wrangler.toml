@@ -23,4 +23,4 @@ database_id  = "2ca5d340-b444-4083-b85d-18d0150efc62"
 [vars]
 # Sem ALLOWED_ORIGIN napsat MŮŽEŠ, protože to není tajemství.
 # Změň na svoji skutečnou GitHub Pages URL až ji budeš mít.
-ALLOWED_ORIGIN = "https://petmat247.github.io"
+ALLOWED_ORIGIN = "https://petmat247-cloud.github.io"
