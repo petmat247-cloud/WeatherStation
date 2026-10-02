@@ -30,7 +30,7 @@
 
 const WU_API_BASE = 'https://api.weather.com/v2/pws/observations/current';
 const CACHE_TTL   = 60;   // sekund — cache pro /api/current
-const MAX_LIMIT   = 1440; // max počet záznamů pro /api/history (24 hodin po minutě)
+const MAX_LIMIT   = 2880; // max záznamů pro /api/history (2880 = 2 dny po minutě, pro delší rozsahy se vzorkuje)
 const MAX_DAYS    = 365;  // max počet dní pro /api/daily
 
 // ─── Bezpečnostní hlavičky ────────────────────────────────────────────────────
@@ -272,19 +272,45 @@ async function handleHistory(db, url, corsHdrs) {
 
   if (limit === null) return errorResponse('Neplatný parametr limit', 400, corsHdrs);
   if (from > to)      return errorResponse('from musí být menší než to', 400, corsHdrs);
-  if ((to - from) > 365 * 86400) {
-    return errorResponse('Maximální rozsah je 365 dní', 400, corsHdrs);
+  if ((to - from) > 1825 * 86400) {
+    return errorResponse('Maximální rozsah je 5 let', 400, corsHdrs);
   }
 
-  const rows = await db
-    .prepare(`
-      SELECT * FROM measurements
-      WHERE timestamp BETWEEN ? AND ?
-      ORDER BY timestamp ASC
-      LIMIT ?
-    `)
-    .bind(from, to, limit)
-    .all();
+  // Výpočet kroku pro rovnoměrné vzorkování přes celý rozsah.
+  // Bez vzorkování by LIMIT vrátil jen prvních N záznamů ze začátku rozsahu —
+  // pro 90 dní dat by to bylo jen první 1–2 dny.
+  const rangeSeconds = to - from;
+  const targetPoints = limit;                             // kolik bodů chceme
+  const rawStep      = rangeSeconds / targetPoints;       // ideální krok v sekundách
+  // Zaokrouhlíme krok na celé minuty (60 s) — záznamy jsou ukládány každou minutu.
+  const step = Math.max(60, Math.round(rawStep / 60) * 60);
+
+  let rows;
+  if (step <= 60) {
+    // Krátký rozsah (≤ 24h při limitu 1440) — vrátíme všechny záznamy bez vzorkování.
+    rows = await db
+      .prepare(`
+        SELECT * FROM measurements
+        WHERE timestamp BETWEEN ? AND ?
+        ORDER BY timestamp ASC
+        LIMIT ?
+      `)
+      .bind(from, to, limit)
+      .all();
+  } else {
+    // Dlouhý rozsah — vzorkujeme: vezmeme vždy první záznam z každého časového bucketu.
+    // (timestamp - from) / step = číslo bucketu; bucket * step + from = začátek bucketu.
+    rows = await db
+      .prepare(`
+        SELECT * FROM measurements
+        WHERE timestamp BETWEEN ? AND ?
+          AND (timestamp - ?) % ? < 60
+        ORDER BY timestamp ASC
+        LIMIT ?
+      `)
+      .bind(from, to, from, step, limit)
+      .all();
+  }
 
   return jsonResponse({ count: rows.results.length, data: rows.results }, 200, corsHdrs);
 }
