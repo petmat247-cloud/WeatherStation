@@ -424,7 +424,6 @@ function buildStatCard(title, period) {
       </div>
     </div>`;
 }
-}
 
 async function loadStats() {
   const grid = document.getElementById('stats-grid');
