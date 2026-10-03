@@ -463,23 +463,43 @@ async function loadRecords() {
     grid.innerHTML = `
       <div class="record-card">
         <div class="record-icon">🌡️</div>
-        <div class="record-label">Nejvyšší teplota</div>
+        <div class="record-label">Nejvyšší teplota venku</div>
         <div class="record-value hot">${fmt(r.temp_max)} °C</div>
       </div>
       <div class="record-card">
         <div class="record-icon">🥶</div>
-        <div class="record-label">Nejnižší teplota</div>
+        <div class="record-label">Nejnižší teplota venku</div>
         <div class="record-value cold">${fmt(r.temp_min)} °C</div>
       </div>
       <div class="record-card">
-        <div class="record-icon">🏠</div>
+        <div class="record-icon">🏠🌡️</div>
         <div class="record-label">Max. teplota doma</div>
-        <div class="record-value home-temp" style="color:var(--warn)">${fmt(r.temp_in_max)} °C</div>
+        <div class="record-value" style="color:var(--warn)">${fmt(r.temp_in_max)} °C</div>
       </div>
       <div class="record-card">
-        <div class="record-icon">❄️</div>
+        <div class="record-icon">🏠❄️</div>
         <div class="record-label">Min. teplota doma</div>
-        <div class="record-value home-temp" style="color:#0ea5e9">${fmt(r.temp_in_min)} °C</div>
+        <div class="record-value" style="color:#0ea5e9">${fmt(r.temp_in_min)} °C</div>
+      </div>
+      <div class="record-card">
+        <div class="record-icon">💧</div>
+        <div class="record-label">Nejvyšší vlhkost venku</div>
+        <div class="record-value" style="color:var(--chart-hum)">${fmt0(r.humidity_max)} %</div>
+      </div>
+      <div class="record-card">
+        <div class="record-icon">🌵</div>
+        <div class="record-label">Nejnižší vlhkost venku</div>
+        <div class="record-value" style="color:var(--chart-hum)">${fmt0(r.humidity_min)} %</div>
+      </div>
+      <div class="record-card">
+        <div class="record-icon">🏠💧</div>
+        <div class="record-label">Max. vlhkost doma</div>
+        <div class="record-value home-hum">${fmt0(r.humidity_in_max)} %</div>
+      </div>
+      <div class="record-card">
+        <div class="record-icon">🏜️</div>
+        <div class="record-label">Min. vlhkost doma</div>
+        <div class="record-value home-hum">${fmt0(r.humidity_in_min)} %</div>
       </div>
       <div class="record-card">
         <div class="record-icon">💨</div>
@@ -505,11 +525,6 @@ async function loadRecords() {
         <div class="record-icon">⬇️</div>
         <div class="record-label">Nejnižší tlak</div>
         <div class="record-value pres">${fmt(r.pressure_min)} hPa</div>
-      </div>
-      <div class="record-card">
-        <div class="record-icon">💧</div>
-        <div class="record-label">Nejvyšší vlhkost</div>
-        <div class="record-value" style="color:var(--chart-hum)">${fmt0(r.humidity_max)} %</div>
       </div>
       <div class="record-card" style="grid-column: 1 / -1; text-align:center; background:var(--surface2);">
         <div class="record-icon">📚</div>

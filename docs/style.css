@@ -346,11 +346,13 @@ header {
 .record-icon  { font-size: 2rem; margin-bottom: 0.5rem; }
 .record-label { font-size: 0.78rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
 .record-value { font-size: 2rem; font-weight: 800; margin: 0.4rem 0 0.2rem; }
-.record-value.hot  { color: var(--danger); }
-.record-value.cold { color: #3b82f6; }
-.record-value.wind { color: #a855f7; }
-.record-value.rain { color: #06b6d4; }
-.record-value.pres { color: var(--accent); }
+.record-value.hot      { color: var(--danger); }
+.record-value.cold     { color: #3b82f6; }
+.record-value.wind     { color: #a855f7; }
+.record-value.rain     { color: #06b6d4; }
+.record-value.pres     { color: var(--accent); }
+.record-value.home-hum { color: #0d9488; }
+[data-theme="dark"] .record-value.home-hum { color: #14b8a6; }
 .record-count {
   font-size: 0.8rem;
   color: var(--text-muted);
