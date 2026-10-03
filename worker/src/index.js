@@ -379,39 +379,44 @@ async function handleRecords(db, corsHdrs) {
   return jsonResponse(row, 200, { ...corsHdrs, 'Cache-Control': 'public, max-age=300' });
 }
 
-/** GET /api/stats — statistiky za 24h / 7 dní / 30 dní */
+/** GET /api/stats — statistiky za všechna časová okna */
 async function handleStats(db, corsHdrs) {
   const now = Math.floor(Date.now() / 1000);
 
-  const [d1, d7, d30] = await Promise.all([
-    db.prepare(`
-      SELECT ROUND(AVG(temp_out),1) avg_temp, ROUND(MAX(temp_out),1) max_temp,
-             ROUND(MIN(temp_out),1) min_temp, ROUND(AVG(humidity_out),0) avg_hum,
-             ROUND(AVG(temp_in),1) avg_temp_in, ROUND(MAX(temp_in),1) max_temp_in,
-             ROUND(MIN(temp_in),1) min_temp_in, ROUND(AVG(humidity_in),0) avg_hum_in,
-             ROUND(MAX(wind_gust),1) max_gust, COUNT(*) records
-      FROM measurements WHERE timestamp >= ?
-    `).bind(now - 86400).first(),
-    db.prepare(`
-      SELECT ROUND(AVG(temp_out),1) avg_temp, ROUND(MAX(temp_out),1) max_temp,
-             ROUND(MIN(temp_out),1) min_temp, ROUND(AVG(humidity_out),0) avg_hum,
-             ROUND(AVG(temp_in),1) avg_temp_in, ROUND(MAX(temp_in),1) max_temp_in,
-             ROUND(MIN(temp_in),1) min_temp_in, ROUND(AVG(humidity_in),0) avg_hum_in,
-             ROUND(MAX(wind_gust),1) max_gust, COUNT(*) records
-      FROM measurements WHERE timestamp >= ?
-    `).bind(now - 7 * 86400).first(),
-    db.prepare(`
-      SELECT ROUND(AVG(temp_out),1) avg_temp, ROUND(MAX(temp_out),1) max_temp,
-             ROUND(MIN(temp_out),1) min_temp, ROUND(AVG(humidity_out),0) avg_hum,
-             ROUND(AVG(temp_in),1) avg_temp_in, ROUND(MAX(temp_in),1) max_temp_in,
-             ROUND(MIN(temp_in),1) min_temp_in, ROUND(AVG(humidity_in),0) avg_hum_in,
-             ROUND(MAX(wind_gust),1) max_gust, COUNT(*) records
-      FROM measurements WHERE timestamp >= ?
-    `).bind(now - 30 * 86400).first(),
+  // Sdílený SQL dotaz — jen přes parametrizovaný timestamp
+  const q = (cutoff) => db.prepare(`
+    SELECT ROUND(AVG(temp_out),1) avg_temp, ROUND(MAX(temp_out),1) max_temp,
+           ROUND(MIN(temp_out),1) min_temp, ROUND(AVG(humidity_out),0) avg_hum,
+           ROUND(AVG(temp_in),1) avg_temp_in, ROUND(MAX(temp_in),1) max_temp_in,
+           ROUND(MIN(temp_in),1) min_temp_in, ROUND(AVG(humidity_in),0) avg_hum_in,
+           ROUND(MAX(wind_gust),1) max_gust, COUNT(*) records
+    FROM measurements WHERE timestamp >= ?
+  `).bind(cutoff).first();
+
+  const [h1, d1, d7, d30, d60, d90, d180, d365, all] = await Promise.all([
+    q(now - 3600),               // 1 hodina
+    q(now - 86400),              // 24 hodin
+    q(now - 7   * 86400),        // 7 dní
+    q(now - 30  * 86400),        // 30 dní
+    q(now - 60  * 86400),        // 60 dní
+    q(now - 90  * 86400),        // 90 dní
+    q(now - 180 * 86400),        // 180 dní
+    q(now - 365 * 86400),        // 365 dní
+    q(0),                        // vše (od Unix epoch 0)
   ]);
 
   return jsonResponse(
-    { last_24h: d1, last_7d: d7, last_30d: d30 },
+    {
+      last_1h:   h1,
+      last_24h:  d1,
+      last_7d:   d7,
+      last_30d:  d30,
+      last_60d:  d60,
+      last_90d:  d90,
+      last_180d: d180,
+      last_365d: d365,
+      all:       all,
+    },
     200,
     { ...corsHdrs, 'Cache-Control': 'public, max-age=120' },
   );

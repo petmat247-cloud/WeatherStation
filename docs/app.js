@@ -5,7 +5,7 @@
  * Komunikuje s Cloudflare Worker REST API:
  *   GET /api/current   — poslední naměřený záznam
  *   GET /api/history   — záznamy v časovém rozsahu (pro grafy)
- *   GET /api/stats     — statistiky za 24h / 7d / 30d
+ *   GET /api/stats     — statistiky za 1h / 24h / 7d / 30d / 60d / 90d / 180d / 365d / vše
  *   GET /api/records   — absolutní rekordy ze všech dat
  */
 
@@ -412,9 +412,16 @@ async function loadStats() {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const s = await res.json();
 
-    grid.innerHTML = buildStatCard('📅 Posledních 24 hodin', s.last_24h)
-                   + buildStatCard('📅 Posledních 7 dní',    s.last_7d)
-                   + buildStatCard('📅 Posledních 30 dní',   s.last_30d);
+    grid.innerHTML =
+      buildStatCard('⏱️ Poslední hodina',    s.last_1h)
+    + buildStatCard('📅 Posledních 24 hodin', s.last_24h)
+    + buildStatCard('📅 Posledních 7 dní',    s.last_7d)
+    + buildStatCard('📅 Posledních 30 dní',   s.last_30d)
+    + buildStatCard('📅 Posledních 60 dní',   s.last_60d)
+    + buildStatCard('📅 Posledních 90 dní',   s.last_90d)
+    + buildStatCard('📅 Posledních 180 dní',  s.last_180d)
+    + buildStatCard('📅 Posledních 365 dní',  s.last_365d)
+    + buildStatCard('📚 Celá historia',        s.all);
 
     hideError('stats-error');
     statsLoaded = true;
