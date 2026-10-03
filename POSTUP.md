@@ -104,6 +104,12 @@ Frontend — GitHub Pages (dashboard s grafy)
 - [x] MAX_LIMIT v handleHistory zvýšen z 1440 na 2880 (rezerva pro budoucnost)
 - [x] Maximální rozsah API rozšířen z 365d na 5 let (pro tlačítko „Vše")
 
+### Chat 8 — Rozšíření statistik a rekordů (3. října 2026)
+- [x] **Statistiky**: rozšířeno na všechna časová okna (1h, 24h, 7d, 30d, 60d, 90d, 180d, 365d, celá historie)
+- [x] **Layout statistik**: uspořádáno do 2 řádků (6 karet nahoře + 3 karty dole, plně responzivní)
+- [x] **Detailní metriky ve statistikách**: přidána max/min vnitřní teplota, max/min vnitřní vlhkost, max. srážky
+- [x] **Doplnění rekordů**: `/api/records` a frontend rozšířeny o pocitovou teplotu (max/min), rosný bod (max/min) a maximální rychlost větru
+
 ---
 
 ## 🔜 CO ZBÝVÁ

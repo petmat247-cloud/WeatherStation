@@ -472,6 +472,26 @@ async function loadRecords() {
         <div class="record-value cold">${fmt(r.temp_min)} °C</div>
       </div>
       <div class="record-card">
+        <div class="record-icon">🔥</div>
+        <div class="record-label">Max. pocitová teplota</div>
+        <div class="record-value hot">${fmt(r.feels_like_max)} °C</div>
+      </div>
+      <div class="record-card">
+        <div class="record-icon">🧊</div>
+        <div class="record-label">Min. pocitová teplota</div>
+        <div class="record-value cold">${fmt(r.feels_like_min)} °C</div>
+      </div>
+      <div class="record-card">
+        <div class="record-icon">🌫️</div>
+        <div class="record-label">Max. rosný bod</div>
+        <div class="record-value" style="color:#0284c7">${fmt(r.dew_point_max)} °C</div>
+      </div>
+      <div class="record-card">
+        <div class="record-icon">❄️</div>
+        <div class="record-label">Min. rosný bod</div>
+        <div class="record-value" style="color:#38bdf8">${fmt(r.dew_point_min)} °C</div>
+      </div>
+      <div class="record-card">
         <div class="record-icon">🏠🌡️</div>
         <div class="record-label">Max. teplota doma</div>
         <div class="record-value" style="color:var(--warn)">${fmt(r.temp_in_max)} °C</div>
@@ -505,6 +525,11 @@ async function loadRecords() {
         <div class="record-icon">💨</div>
         <div class="record-label">Nejsilnější náraz větru</div>
         <div class="record-value wind">${fmt(r.wind_gust_max)} m/s</div>
+      </div>
+      <div class="record-card">
+        <div class="record-icon">🌪️</div>
+        <div class="record-label">Max. rychlost větru</div>
+        <div class="record-value wind">${fmt(r.wind_speed_max)} m/s</div>
       </div>
       <div class="record-card">
         <div class="record-icon">🌧️</div>
