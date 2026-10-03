@@ -273,9 +273,20 @@ header {
 /* ── Statistiky ─────────────────────────────────────────────────────────── */
 .stats-grid {
   display: grid;
-  /* 9 karet: na velkých obrazovkách 3 na řádek, na středních 2, na mobilu 1 */
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  /* Řádek 1: 1h · 24h · 7d · 30d · 60d · 90d  (6 karet)
+     Řádek 2: 180d · 365d · Vše               (3 karty) */
+  grid-template-columns: repeat(6, 1fr);
   gap: 0.85rem;
+}
+
+/* Střední displeje — 3 sloupce */
+@media (max-width: 1100px) {
+  .stats-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+/* Tablet — 2 sloupce */
+@media (max-width: 700px) {
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
 .stat-card {
