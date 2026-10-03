@@ -109,6 +109,9 @@ Frontend — GitHub Pages (dashboard s grafy)
 - [x] **Layout statistik**: uspořádáno do 2 řádků (6 karet nahoře + 3 karty dole, plně responzivní)
 - [x] **Detailní metriky ve statistikách**: přidána max/min vnitřní teplota, max/min vnitřní vlhkost, max. srážky
 - [x] **Doplnění rekordů**: `/api/records` a frontend rozšířeny o pocitovou teplotu (max/min), rosný bod (max/min) a maximální rychlost větru
+- [x] **Nadpis a branding**: přejmenováno na **WeatherStation** (Petr Klouček)
+- [x] **Aktuálně**: přidána samostatná karta pro vnitřní vlhkost s popisem komfortu
+- [x] **Patička**: přidána responzivní patička napříč celým webem (soukromý nekomerční projekt Petra Kloučka)
 
 ---
 

@@ -23,6 +23,7 @@
   --card-wind:    #fdf4ff;
   --card-rain:    #ecfeff;
   --card-in:      #fefce8;
+  --card-in-hum:  #f0fdfa;
 
   --chart-temp:   rgba(239, 68, 68, 1);
   --chart-hum:    rgba(34, 197, 94, 1);
@@ -51,6 +52,7 @@
   --card-wind:    #20103a;
   --card-rain:    #062a33;
   --card-in:      #2d2a00;
+  --card-in-hum:  #042f2e;
 }
 
 /* ── Reset & Base ──────────────────────────────────────────────────────── */
@@ -66,6 +68,8 @@ body {
   color: var(--text);
   transition: background 0.3s, color 0.3s;
   min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 /* ── Header ────────────────────────────────────────────────────────────── */
@@ -167,7 +171,7 @@ header {
 .tab-btn.active       { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
 
 /* ── Panely záložek ────────────────────────────────────────────────────── */
-.tab-panel          { display: none; padding: 1.5rem; }
+.tab-panel          { display: none; padding: 1.5rem; flex: 1; }
 .tab-panel.active   { display: block; }
 
 /* ── Karty aktuálních hodnot ───────────────────────────────────────────── */
@@ -214,8 +218,9 @@ header {
 .card-hum-out   { background: var(--card-hum); }
 .card-pressure  { background: var(--card-pres); }
 .card-wind-card { background: var(--card-wind); }
-.card-rain      { background: var(--card-rain); }
-.card-indoor    { background: var(--card-in); }
+.card-rain        { background: var(--card-rain); }
+.card-indoor      { background: var(--card-in); }
+.card-indoor-hum  { background: var(--card-in-hum); }
 
 /* ── Timestamp bar ─────────────────────────────────────────────────────── */
 .timestamp-bar {
@@ -416,4 +421,39 @@ header {
 
 @media (max-width: 400px) {
   .cards-grid { grid-template-columns: 1fr; }
+}
+
+/* ── Patička (Footer) ──────────────────────────────────────────────────── */
+.site-footer {
+  margin-top: auto;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding: 1.75rem 1.5rem;
+  text-align: center;
+  transition: background 0.3s, border-color 0.3s;
+}
+
+.footer-inner {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.footer-title {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--accent);
+  margin-bottom: 0.4rem;
+}
+
+.footer-text {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin-bottom: 0.5rem;
+}
+
+.footer-copy {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  opacity: 0.85;
 }

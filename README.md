@@ -1,4 +1,4 @@
-# 🌦️ Stanice — Osobní meteorologický dashboard
+# 🌦️ WeatherStation — Osobní meteorologický dashboard
 
 > Vlastní webový dashboard pro meteorologickou/měřicí stanici **Sencor SWS 9898 WIFI**.  
 > Backend postavený na **Cloudflare Workers** stahuje každou minutu data přes oficiální **Weather Underground API** a ukládá je do **Cloudflare D1**. Zobrazování zajišťuje statická stránka hostovaná na **GitHub Pages**.

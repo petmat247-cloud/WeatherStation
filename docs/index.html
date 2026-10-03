@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Stanice — Meteorologický dashboard</title>
+  <title>WeatherStation — Meteorologický dashboard</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -14,8 +14,8 @@
   <header>
     <div class="header-left">
       <div>
-        <div class="logo">🌦️ Stanice</div>
-        <div class="header-meta">Sencor SWS 9898 WIFI · Petmat247</div>
+        <div class="logo">🌦️ WeatherStation</div>
+        <div class="header-meta">Sencor SWS 9898 WIFI · Petr Klouček</div>
       </div>
     </div>
     <div class="header-right">
@@ -63,12 +63,20 @@
         </div>
       </div>
 
-      <!-- Vnitřní teplota (WU API neposkytuje — zobrazí '—' pro live záznamy) -->
+      <!-- Vnitřní teplota -->
       <div class="card card-indoor">
         <span class="card-icon">🏠</span>
         <div class="card-label">Vnitřní teplota</div>
         <div class="card-value"><span id="val-temp-in">—</span><span class="card-unit"> °C</span></div>
-        <div class="card-sub">Vlhkost uvnitř: <strong id="val-hum-in">—</strong> %</div>
+        <div class="card-sub">Senzor doma (Weathercloud)</div>
+      </div>
+
+      <!-- Vnitřní vlhkost -->
+      <div class="card card-indoor-hum">
+        <span class="card-icon">🏠💧</span>
+        <div class="card-label">Vnitřní vlhkost</div>
+        <div class="card-value"><span id="val-hum-in">—</span><span class="card-unit"> %</span></div>
+        <div class="card-sub" id="hum-in-desc"></div>
       </div>
 
       <!-- Venkovní vlhkost -->
@@ -185,6 +193,21 @@
       <div class="loading"><div class="spinner"></div> Načítám rekordy…</div>
     </div>
   </div>
+
+  <!-- ═══════════════════════════════════════════════════
+       PATIČKA (FOOTER)
+  ═══════════════════════════════════════════════════ -->
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-title">🌦️ WeatherStation — Petr Klouček</div>
+      <p class="footer-text">
+        Toto je soukromá meteorologická stránka Petra Kloučka. Projekt slouží výhradně pro osobní potřebu a není určen pro komerční využití. Naměřená data mají orientační charakter.
+      </p>
+      <div class="footer-copy">
+        Meteorologická stanice Sencor SWS 9898 WIFI · © 2026 Petr Klouček
+      </div>
+    </div>
+  </footer>
 
   <!-- ═══════════════════════════════════════════════════
        SKRIPTY — načítány na konci pro rychlejší render

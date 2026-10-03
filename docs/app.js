@@ -125,6 +125,8 @@ async function loadCurrent() {
     // Historická data z Weathercloudu indoor hodnoty obsahují
     document.getElementById('val-temp-in').textContent = data.temp_in !== null ? fmt(data.temp_in) : '—';
     document.getElementById('val-hum-in').textContent  = data.humidity_in !== null ? fmt0(data.humidity_in) : '—';
+    const humInDescEl = document.getElementById('hum-in-desc');
+    if (humInDescEl) humInDescEl.textContent = humDesc(data.humidity_in);
 
     // Vlhkost
     document.getElementById('val-hum-out').textContent = fmt0(data.humidity_out);
