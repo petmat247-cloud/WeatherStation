@@ -322,6 +322,7 @@ header {
 .stat-row .value.hot       { color: var(--danger); }
 .stat-row .value.cold      { color: #3b82f6; }
 .stat-row .value.wind      { color: #a855f7; }
+.stat-row .value.rain      { color: #06b6d4; }
 .stat-row .value.home-temp { color: #d97706; }
 .stat-row .value.home-hum  { color: #0d9488; }
 [data-theme="dark"] .stat-row .value.home-temp { color: #f59e0b; }

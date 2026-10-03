@@ -389,7 +389,10 @@ async function handleStats(db, corsHdrs) {
            ROUND(MIN(temp_out),1) min_temp, ROUND(AVG(humidity_out),0) avg_hum,
            ROUND(AVG(temp_in),1) avg_temp_in, ROUND(MAX(temp_in),1) max_temp_in,
            ROUND(MIN(temp_in),1) min_temp_in, ROUND(AVG(humidity_in),0) avg_hum_in,
-           ROUND(MAX(wind_gust),1) max_gust, COUNT(*) records
+           MAX(humidity_in) max_hum_in, MIN(humidity_in) min_hum_in,
+           ROUND(MAX(wind_gust),1) max_gust,
+           ROUND(MAX(rain_total),1) max_rain,
+           COUNT(*) records
     FROM measurements WHERE timestamp >= ?
   `).bind(cutoff).first();
 

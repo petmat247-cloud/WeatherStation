@@ -387,8 +387,24 @@ function buildStatCard(title, period) {
         <span class="value home-temp">${fmt(period.avg_temp_in)} °C</span>
       </div>
       <div class="stat-row">
+        <span class="label">Max. vnitřní teplota</span>
+        <span class="value home-temp">${fmt(period.max_temp_in)} °C</span>
+      </div>
+      <div class="stat-row">
+        <span class="label">Min. vnitřní teplota</span>
+        <span class="value home-temp">${fmt(period.min_temp_in)} °C</span>
+      </div>
+      <div class="stat-row">
         <span class="label">Průměrná vnitřní vlhkost</span>
         <span class="value home-hum">${fmt0(period.avg_hum_in)} %</span>
+      </div>
+      <div class="stat-row">
+        <span class="label">Max. vnitřní vlhkost</span>
+        <span class="value home-hum">${fmt0(period.max_hum_in)} %</span>
+      </div>
+      <div class="stat-row">
+        <span class="label">Min. vnitřní vlhkost</span>
+        <span class="value home-hum">${fmt0(period.min_hum_in)} %</span>
       </div>
       <div class="stat-row">
         <span class="label">Průměrná vlhkost venku</span>
@@ -399,10 +415,15 @@ function buildStatCard(title, period) {
         <span class="value wind">${fmt(period.max_gust)} m/s</span>
       </div>
       <div class="stat-row">
+        <span class="label">Max. srážky</span>
+        <span class="value rain">${fmt(period.max_rain)} mm</span>
+      </div>
+      <div class="stat-row">
         <span class="label">Počet záznamů</span>
         <span class="value">${period.records}</span>
       </div>
     </div>`;
+}
 }
 
 async function loadStats() {
