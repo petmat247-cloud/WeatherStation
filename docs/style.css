@@ -147,10 +147,11 @@ header {
 /* ── Záložky (Tabs) ────────────────────────────────────────────────────── */
 .tabs {
   display: flex;
-  flex-wrap: wrap;
   gap: 0.25rem;
   padding: 1rem 1.5rem 0;
   border-bottom: 2px solid var(--border);
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .tab-btn {
