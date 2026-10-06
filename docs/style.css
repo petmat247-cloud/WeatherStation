@@ -147,10 +147,10 @@ header {
 /* ── Záložky (Tabs) ────────────────────────────────────────────────────── */
 .tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.25rem;
   padding: 1rem 1.5rem 0;
   border-bottom: 2px solid var(--border);
-  overflow-x: auto;
 }
 
 .tab-btn {
@@ -292,6 +292,11 @@ header {
 /* Tablet — 2 sloupce */
 @media (max-width: 700px) {
   .stats-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* Mobil — 1 sloupec */
+@media (max-width: 540px) {
+  .stats-grid { grid-template-columns: 1fr; }
 }
 
 .stat-card {
