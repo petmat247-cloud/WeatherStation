@@ -148,6 +148,15 @@ async function loadCurrent() {
 
     setStatus('online', `Online · ${relativeTime(data.timestamp)}`);
     hideError('current-error');
+
+    // Dní bez deště — načteme souběžně z /api/records (cachovano 5 min)
+    fetch(`${API}/api/records`)
+      .then(r => r.json())
+      .then(rec => {
+        const el = document.getElementById('val-dry-streak');
+        if (el) el.textContent = rec.dry_streak ?? '—';
+      })
+      .catch(() => {}); // tiše ignorujeme chybu, hlavní data jsou důležitější
   } catch (e) {
     setStatus('error', 'Chyba připojení');
     showError('current-error', `Nepodařilo se načíst aktuální data: ${e.message}`);
@@ -421,6 +430,14 @@ function buildStatCard(title, period) {
         <span class="value rain">${fmt(period.max_rain)} mm</span>
       </div>
       <div class="stat-row">
+        <span class="label">☔ Dní s deštěm</span>
+        <span class="value rain">${period.rainy_days ?? '—'}</span>
+      </div>
+      <div class="stat-row">
+        <span class="label">☀️ Dní bez deště</span>
+        <span class="value" style="color:#f59e0b">${period.dry_days ?? '—'}</span>
+      </div>
+      <div class="stat-row">
         <span class="label">Počet záznamů</span>
         <span class="value">${period.records}</span>
       </div>
@@ -544,14 +561,14 @@ async function loadRecords() {
         <div class="record-value rain">${fmt(r.rain_total_max)} mm</div>
       </div>
       <div class="record-card">
-        <div class="record-icon">⬆️</div>
-        <div class="record-label">Nejvyšší tlak</div>
-        <div class="record-value pres">${fmt(r.pressure_max)} hPa</div>
+        <div class="record-icon">☀️</div>
+        <div class="record-label">Nejdelší série sucha</div>
+        <div class="record-value" style="color:#f59e0b">${r.max_dry_streak ?? '—'} dní</div>
       </div>
       <div class="record-card">
-        <div class="record-icon">⬇️</div>
-        <div class="record-label">Nejnižší tlak</div>
-        <div class="record-value pres">${fmt(r.pressure_min)} hPa</div>
+        <div class="record-icon">🌵</div>
+        <div class="record-label">Aktuální série sucha</div>
+        <div class="record-value" style="color:#d97706">${r.dry_streak ?? '—'} dní</div>
       </div>
       <div class="record-card" style="grid-column: 1 / -1; text-align:center; background:var(--surface2);">
         <div class="record-icon">📚</div>

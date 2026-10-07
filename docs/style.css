@@ -22,6 +22,7 @@
   --card-pres:    #eff6ff;
   --card-wind:    #fdf4ff;
   --card-rain:    #ecfeff;
+  --card-dry:     #fffbeb;
   --card-in:      #fefce8;
   --card-in-hum:  #f0fdfa;
 
@@ -51,6 +52,7 @@
   --card-pres:    #0a1a3d;
   --card-wind:    #20103a;
   --card-rain:    #062a33;
+  --card-dry:     #2d2200;
   --card-in:      #2d2a00;
   --card-in-hum:  #042f2e;
 }
@@ -220,6 +222,7 @@ header {
 .card-pressure  { background: var(--card-pres); }
 .card-wind-card { background: var(--card-wind); }
 .card-rain        { background: var(--card-rain); }
+.card-dry         { background: var(--card-dry); }
 .card-indoor      { background: var(--card-in); }
 .card-indoor-hum  { background: var(--card-in-hum); }
 

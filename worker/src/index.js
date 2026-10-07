@@ -353,8 +353,9 @@ async function handleDaily(db, url, corsHdrs) {
 
 /** GET /api/records — absolutní rekordy ze všech dat */
 async function handleRecords(db, corsHdrs) {
-  const row = await db
-    .prepare(`
+  const [row, dryRow, streakRow] = await Promise.all([
+    // Základní rekordy
+    db.prepare(`
       SELECT
         ROUND(MAX(temp_out), 1)         AS temp_max,
         ROUND(MIN(temp_out), 1)         AS temp_min,
@@ -378,17 +379,58 @@ async function handleRecords(db, corsHdrs) {
         datetime(MAX(timestamp), 'unixepoch') AS newest_record,
         COUNT(*)                        AS total_records
       FROM measurements
-    `)
-    .first();
+    `).first(),
 
-  return jsonResponse(row, 200, { ...corsHdrs, 'Cache-Control': 'public, max-age=300' });
+    // Nejdelší série sucha — gaps-and-islands technika:
+    // Pro každý suchý den odečteme jeho pořadové číslo od julianday datumu.
+    // Po sobě jdoucí suché dny dostanou stejnou hodnotu (grp) → GROUP BY grp → MAX(COUNT).
+    db.prepare(`
+      WITH daily AS (
+        SELECT date(timestamp, 'unixepoch', '+1 hour') AS day,
+               MAX(rain_rate) AS max_rain
+        FROM measurements
+        GROUP BY day
+      ),
+      dry AS (
+        SELECT day,
+               ROW_NUMBER() OVER (ORDER BY day) AS rn
+        FROM daily WHERE max_rain = 0
+      ),
+      grouped AS (
+        SELECT day, ROUND(julianday(day) - rn, 0) AS grp
+        FROM dry
+      )
+      SELECT MAX(cnt) AS max_dry_streak
+      FROM (SELECT COUNT(*) AS cnt FROM grouped GROUP BY grp)
+    `).first(),
+
+    // Aktuální série sucha — dny od posledního deště do dnes
+    db.prepare(`
+      SELECT COUNT(DISTINCT date(timestamp, 'unixepoch', '+1 hour')) AS dry_streak
+      FROM measurements
+      WHERE date(timestamp, 'unixepoch', '+1 hour') > (
+        SELECT date(timestamp, 'unixepoch', '+1 hour') AS day
+        FROM measurements
+        GROUP BY day
+        HAVING MAX(rain_rate) > 0
+        ORDER BY day DESC
+        LIMIT 1
+      )
+    `).first(),
+  ]);
+
+  return jsonResponse(
+    { ...row, max_dry_streak: dryRow?.max_dry_streak ?? 0, dry_streak: streakRow?.dry_streak ?? 0 },
+    200,
+    { ...corsHdrs, 'Cache-Control': 'public, max-age=300' },
+  );
 }
 
 /** GET /api/stats — statistiky za všechna časová okna */
 async function handleStats(db, corsHdrs) {
   const now = Math.floor(Date.now() / 1000);
 
-  // Sdílený SQL dotaz — jen přes parametrizovaný timestamp
+  // Sdílený SQL dotaz pro základní metriky — jen přes parametrizovaný timestamp
   const q = (cutoff) => db.prepare(`
     SELECT ROUND(AVG(temp_out),1) avg_temp, ROUND(MAX(temp_out),1) max_temp,
            ROUND(MIN(temp_out),1) min_temp, ROUND(AVG(humidity_out),0) avg_hum,
@@ -401,29 +443,52 @@ async function handleStats(db, corsHdrs) {
     FROM measurements WHERE timestamp >= ?
   `).bind(cutoff).first();
 
-  const [h1, d1, d7, d30, d60, d90, d180, d365, all] = await Promise.all([
-    q(now - 3600),               // 1 hodina
-    q(now - 86400),              // 24 hodin
-    q(now - 7   * 86400),        // 7 dní
-    q(now - 30  * 86400),        // 30 dní
-    q(now - 60  * 86400),        // 60 dní
-    q(now - 90  * 86400),        // 90 dní
-    q(now - 180 * 86400),        // 180 dní
-    q(now - 365 * 86400),        // 365 dní
-    q(0),                        // vše (od Unix epoch 0)
+  // Dotaz pro počet dešťových / suchých dní v období
+  const qRain = (cutoff) => db.prepare(`
+    SELECT
+      SUM(CASE WHEN max_rain > 0 THEN 1 ELSE 0 END) AS rainy_days,
+      SUM(CASE WHEN max_rain = 0 THEN 1 ELSE 0 END) AS dry_days
+    FROM (
+      SELECT date(timestamp, 'unixepoch', '+1 hour') AS day,
+             MAX(rain_rate) AS max_rain
+      FROM measurements
+      WHERE timestamp >= ?
+      GROUP BY day
+    )
+  `).bind(cutoff).first();
+
+  const cutoffs = [
+    now - 3600,           // 1h
+    now - 86400,          // 24h
+    now - 7   * 86400,    // 7d
+    now - 30  * 86400,    // 30d
+    now - 60  * 86400,    // 60d
+    now - 90  * 86400,    // 90d
+    now - 180 * 86400,    // 180d
+    now - 365 * 86400,    // 365d
+    0,                    // vše
+  ];
+
+  const [h1, d1, d7, d30, d60, d90, d180, d365, all,
+         r1h, r24h, r7d, r30d, r60d, r90d, r180d, r365d, rAll] = await Promise.all([
+    ...cutoffs.map(c => q(c)),
+    ...cutoffs.map(c => qRain(c)),
   ]);
+
+  // Sloučí základní metriky s počty dešťových dní
+  const merge = (base, rain) => ({ ...base, ...rain });
 
   return jsonResponse(
     {
-      last_1h:   h1,
-      last_24h:  d1,
-      last_7d:   d7,
-      last_30d:  d30,
-      last_60d:  d60,
-      last_90d:  d90,
-      last_180d: d180,
-      last_365d: d365,
-      all:       all,
+      last_1h:   merge(h1,   r1h),
+      last_24h:  merge(d1,   r24h),
+      last_7d:   merge(d7,   r7d),
+      last_30d:  merge(d30,  r30d),
+      last_60d:  merge(d60,  r60d),
+      last_90d:  merge(d90,  r90d),
+      last_180d: merge(d180, r180d),
+      last_365d: merge(d365, r365d),
+      all:       merge(all,  rAll),
     },
     200,
     { ...corsHdrs, 'Cache-Control': 'public, max-age=120' },
