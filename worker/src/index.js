@@ -28,10 +28,14 @@
 
 // ─── Konstanty ────────────────────────────────────────────────────────────────
 
-const WU_API_BASE = 'https://api.weather.com/v2/pws/observations/current';
-const CACHE_TTL   = 60;   // sekund — cache pro /api/current
-const MAX_LIMIT   = 2880; // max záznamů pro /api/history (2880 = 2 dny po minutě, pro delší rozsahy se vzorkuje)
-const MAX_DAYS    = 365;  // max počet dní pro /api/daily
+const WU_API_BASE        = 'https://api.weather.com/v2/pws/observations/current';
+const CACHE_CURRENT_TTL  = 60;   // 1 minuta — cache pro /api/current
+const CACHE_RECORDS_TTL  = 3600; // 1 hodina — cache pro /api/records
+const CACHE_STATS_TTL    = 1800; // 30 minut — cache pro /api/stats
+const CACHE_HISTORY_TTL  = 300;  // 5 minut — cache pro /api/history
+const CACHE_DAILY_TTL    = 1800; // 30 minut — cache pro /api/daily
+const MAX_LIMIT          = 2880; // max záznamů pro /api/history
+const MAX_DAYS           = 365;  // max počet dní pro /api/daily
 
 // ─── Bezpečnostní hlavičky ────────────────────────────────────────────────────
 
@@ -214,22 +218,59 @@ async function handleCron(env) {
   }
 }
 
-// ─── REST API handlery ────────────────────────────────────────────────────────
+// ─── Cloudflare Edge Cache Helper ──────────────────────────────────────────
 
-/** GET /api/current — poslední naměřený záznam */
-async function handleCurrent(db, corsHdrs, cacheApi, cacheKey) {
-  // Zkus načíst z cache
-  const cached = await cacheApi.match(cacheKey);
-  if (cached) {
-    const body = await cached.json();
-    return jsonResponse(body, 200, { ...corsHdrs, 'X-Cache': 'HIT' });
+/**
+ * Pomocná funkce pro obsluhu odpovědí s Cloudflare Edge Cache (caches.default).
+ * 1. Zkusí najít odpověď v cache.
+ * 2. Pokud najde (HIT), vrátí ji s patřičnými CORS hlavičkami a 'X-Cache': 'HIT'.
+ * 3. Pokud nenajde (MISS), zavolá handler, sestaví odpověď, uloží ji do cache na pozadí
+ *    a vrátí ji s 'X-Cache': 'MISS'.
+ */
+async function handleCachedEndpoint(cacheApi, cacheKey, ttlSeconds, corsHdrs, ctx, fetcher) {
+  if (cacheApi) {
+    try {
+      const cached = await cacheApi.match(cacheKey);
+      if (cached) {
+        const body = await cached.json();
+        return jsonResponse(body, 200, {
+          ...corsHdrs,
+          'Cache-Control': `public, max-age=${ttlSeconds}`,
+          'X-Cache': 'HIT',
+        });
+      }
+    } catch (err) {
+      console.warn('[CACHE] Chyba při čtení:', err.message);
+    }
   }
 
-  // Outdoor data z nejnovějšího záznamu.
-  // Indoor data (temp_in, humidity_in) z posledního záznamu kde NEJSOU null —
-  // WU API indoor hodnoty neposkytuje, doplňuje je Weathercloud cron každých 10 min.
-  // Subquery zajistí, že karta nikdy nezobrazí '—' jen proto, že poslední minutový
-  // WU záznam ještě nebyl aktualizován Weathercloud cronem.
+  const result = await fetcher();
+  const resp = jsonResponse(result, 200, {
+    ...corsHdrs,
+    'Cache-Control': `public, max-age=${ttlSeconds}`,
+    'X-Cache': 'MISS',
+  });
+
+  if (cacheApi) {
+    try {
+      const putPromise = cacheApi.put(cacheKey, resp.clone());
+      if (ctx?.waitUntil) {
+        ctx.waitUntil(putPromise);
+      } else {
+        await putPromise;
+      }
+    } catch (err) {
+      console.warn('[CACHE] Chyba při ukládání:', err.message);
+    }
+  }
+
+  return resp;
+}
+
+// ─── REST API handlery ────────────────────────────────────────────────────────
+
+/** GET /api/current — data pro poslední naměřený záznam */
+async function getCurrentData(db) {
   const row = await db
     .prepare(`
       SELECT
@@ -248,21 +289,16 @@ async function handleCurrent(db, corsHdrs, cacheApi, cacheKey) {
     `)
     .first();
 
-  if (!row) return errorResponse('Žádná data', 404, corsHdrs);
-
-  const resp = jsonResponse(row, 200, {
-    ...corsHdrs,
-    'Cache-Control': `public, max-age=${CACHE_TTL}`,
-    'X-Cache': 'MISS',
-  });
-
-  // Ulož do cache
-  await cacheApi.put(cacheKey, resp.clone());
-  return resp;
+  if (!row) {
+    const err = new Error('Žádná data');
+    err.status = 404;
+    throw err;
+  }
+  return row;
 }
 
 /** GET /api/history?from=TS&to=TS&limit=N */
-async function handleHistory(db, url, corsHdrs) {
+async function fetchHistoryData(db, url) {
   const params = url.searchParams;
   const now    = Math.floor(Date.now() / 1000);
 
@@ -270,24 +306,29 @@ async function handleHistory(db, url, corsHdrs) {
   const to    = parseTimestamp(params.get('to'))   ?? now;
   const limit = parsePositiveInt(params.get('limit'), 144, MAX_LIMIT);
 
-  if (limit === null) return errorResponse('Neplatný parametr limit', 400, corsHdrs);
-  if (from > to)      return errorResponse('from musí být menší než to', 400, corsHdrs);
+  if (limit === null) {
+    const err = new Error('Neplatný parametr limit');
+    err.status = 400;
+    throw err;
+  }
+  if (from > to) {
+    const err = new Error('from musí být menší než to');
+    err.status = 400;
+    throw err;
+  }
   if ((to - from) > 1825 * 86400) {
-    return errorResponse('Maximální rozsah je 5 let', 400, corsHdrs);
+    const err = new Error('Maximální rozsah je 5 let');
+    err.status = 400;
+    throw err;
   }
 
-  // Výpočet kroku pro rovnoměrné vzorkování přes celý rozsah.
-  // Bez vzorkování by LIMIT vrátil jen prvních N záznamů ze začátku rozsahu —
-  // pro 90 dní dat by to bylo jen první 1–2 dny.
   const rangeSeconds = to - from;
-  const targetPoints = limit;                             // kolik bodů chceme
-  const rawStep      = rangeSeconds / targetPoints;       // ideální krok v sekundách
-  // Zaokrouhlíme krok na celé minuty (60 s) — záznamy jsou ukládány každou minutu.
+  const targetPoints = limit;
+  const rawStep      = rangeSeconds / targetPoints;
   const step = Math.max(60, Math.round(rawStep / 60) * 60);
 
   let rows;
   if (step <= 60) {
-    // Krátký rozsah (≤ ~24h) — vrátíme všechny záznamy bez vzorkování.
     rows = await db
       .prepare(`
         SELECT * FROM measurements
@@ -298,9 +339,6 @@ async function handleHistory(db, url, corsHdrs) {
       .bind(from, to, limit)
       .all();
   } else {
-    // Dlouhý rozsah — vzorkujeme pomocí GROUP BY časového bucketu.
-    // Pro každý interval délky `step` sekund vezmeme první (nejstarší) záznam.
-    // Toto funguje spolehlivě bez ohledu na to, jak jsou timestamps v DB zarovnány.
     rows = await db
       .prepare(`
         SELECT * FROM measurements
@@ -317,14 +355,18 @@ async function handleHistory(db, url, corsHdrs) {
       .all();
   }
 
-  return jsonResponse({ count: rows.results.length, data: rows.results }, 200, corsHdrs);
+  return { count: rows.results.length, data: rows.results };
 }
 
 /** GET /api/daily?days=N — denní min/max/avg za posledních N dní */
-async function handleDaily(db, url, corsHdrs) {
+async function fetchDailyData(db, url) {
   const params = url.searchParams;
   const days   = parsePositiveInt(params.get('days'), 30, MAX_DAYS);
-  if (days === null) return errorResponse('Neplatný parametr days', 400, corsHdrs);
+  if (days === null) {
+    const err = new Error('Neplatný parametr days');
+    err.status = 400;
+    throw err;
+  }
 
   const from = Math.floor(Date.now() / 1000) - days * 86400;
 
@@ -348,151 +390,294 @@ async function handleDaily(db, url, corsHdrs) {
     .bind(from)
     .all();
 
-  return jsonResponse({ count: rows.results.length, data: rows.results }, 200, corsHdrs);
+  return { count: rows.results.length, data: rows.results };
 }
 
-/** GET /api/records — absolutní rekordy ze všech dat */
-async function handleRecords(db, corsHdrs) {
-  const [row, dryRow, streakRow] = await Promise.all([
-    // Základní rekordy
-    db.prepare(`
-      SELECT
-        ROUND(MAX(temp_out), 1)         AS temp_max,
-        ROUND(MIN(temp_out), 1)         AS temp_min,
-        ROUND(MAX(feels_like), 1)       AS feels_like_max,
-        ROUND(MIN(feels_like), 1)       AS feels_like_min,
-        ROUND(MAX(dew_point), 1)        AS dew_point_max,
-        ROUND(MIN(dew_point), 1)        AS dew_point_min,
-        ROUND(MAX(temp_in), 1)          AS temp_in_max,
-        ROUND(MIN(temp_in), 1)          AS temp_in_min,
-        ROUND(MAX(pressure), 1)         AS pressure_max,
-        ROUND(MIN(pressure), 1)         AS pressure_min,
-        ROUND(MAX(wind_speed), 1)       AS wind_speed_max,
-        ROUND(MAX(wind_gust), 1)        AS wind_gust_max,
-        ROUND(MAX(rain_rate), 1)        AS rain_rate_max,
-        ROUND(MAX(rain_total), 1)       AS rain_total_max,
-        MIN(humidity_out)               AS humidity_min,
-        MAX(humidity_out)               AS humidity_max,
-        MIN(humidity_in)                AS humidity_in_min,
-        MAX(humidity_in)                AS humidity_in_max,
-        datetime(MIN(timestamp), 'unixepoch') AS oldest_record,
-        datetime(MAX(timestamp), 'unixepoch') AS newest_record,
-        COUNT(*)                        AS total_records
-      FROM measurements
-    `).first(),
+/** GET /api/records — absolutní rekordy ze všech dat (optimalizováno) */
+async function getRecordsData(db) {
+  // 1. Základní rekordy
+  const basicRecordsPromise = db.prepare(`
+    SELECT
+      ROUND(MAX(temp_out), 1)         AS temp_max,
+      ROUND(MIN(temp_out), 1)         AS temp_min,
+      ROUND(MAX(feels_like), 1)       AS feels_like_max,
+      ROUND(MIN(feels_like), 1)       AS feels_like_min,
+      ROUND(MAX(dew_point), 1)        AS dew_point_max,
+      ROUND(MIN(dew_point), 1)        AS dew_point_min,
+      ROUND(MAX(temp_in), 1)          AS temp_in_max,
+      ROUND(MIN(temp_in), 1)          AS temp_in_min,
+      ROUND(MAX(pressure), 1)         AS pressure_max,
+      ROUND(MIN(pressure), 1)         AS pressure_min,
+      ROUND(MAX(wind_speed), 1)       AS wind_speed_max,
+      ROUND(MAX(wind_gust), 1)        AS wind_gust_max,
+      ROUND(MAX(rain_rate), 1)        AS rain_rate_max,
+      ROUND(MAX(rain_total), 1)       AS rain_total_max,
+      MIN(humidity_out)               AS humidity_min,
+      MAX(humidity_out)               AS humidity_max,
+      MIN(humidity_in)                AS humidity_in_min,
+      MAX(humidity_in)                AS humidity_in_max,
+      datetime(MIN(timestamp), 'unixepoch') AS oldest_record,
+      datetime(MAX(timestamp), 'unixepoch') AS newest_record,
+      COUNT(*)                        AS total_records
+    FROM measurements
+  `).first();
 
-    // Nejdelší série sucha — gaps-and-islands technika:
-    // Pro každý suchý den odečteme jeho pořadové číslo od julianday datumu.
-    // Po sobě jdoucí suché dny dostanou stejnou hodnotu (grp) → GROUP BY grp → MAX(COUNT).
-    db.prepare(`
-      WITH daily AS (
-        SELECT date(timestamp, 'unixepoch', '+1 hour') AS day,
-               MAX(rain_rate) AS max_rain
-        FROM measurements
-        GROUP BY day
-      ),
-      dry AS (
-        SELECT day,
-               ROW_NUMBER() OVER (ORDER BY day) AS rn
-        FROM daily WHERE max_rain = 0
-      ),
-      grouped AS (
-        SELECT day, ROUND(julianday(day) - rn, 0) AS grp
-        FROM dry
-      )
-      SELECT MAX(cnt) AS max_dry_streak
-      FROM (SELECT COUNT(*) AS cnt FROM grouped GROUP BY grp)
-    `).first(),
+  // 2. Denní přehled pro výpočet sérií sucha v paměti (0 dodatečných SQL dotazů)
+  const dailyRainPromise = db.prepare(`
+    SELECT date(timestamp, 'unixepoch', '+1 hour') AS day,
+           MAX(rain_rate) AS max_rain
+    FROM measurements
+    GROUP BY day
+    ORDER BY day ASC
+  `).all();
 
-    // Aktuální série sucha — dny od posledního deště do dnes
-    db.prepare(`
-      SELECT COUNT(DISTINCT date(timestamp, 'unixepoch', '+1 hour')) AS dry_streak
-      FROM measurements
-      WHERE date(timestamp, 'unixepoch', '+1 hour') > (
-        SELECT date(timestamp, 'unixepoch', '+1 hour') AS day
-        FROM measurements
-        GROUP BY day
-        HAVING MAX(rain_rate) > 0
-        ORDER BY day DESC
-        LIMIT 1
-      )
-    `).first(),
-  ]);
+  const [row, dailyRainRes] = await Promise.all([basicRecordsPromise, dailyRainPromise]);
+  const days = dailyRainRes?.results ?? [];
 
-  return jsonResponse(
-    { ...row, max_dry_streak: dryRow?.max_dry_streak ?? 0, dry_streak: streakRow?.dry_streak ?? 0 },
-    200,
-    { ...corsHdrs, 'Cache-Control': 'public, max-age=300' },
-  );
+  // Nejdelší série sucha (v paměti)
+  let max_dry_streak = 0;
+  let currentDry = 0;
+  for (const d of days) {
+    if (d.max_rain === 0) {
+      currentDry++;
+      if (currentDry > max_dry_streak) max_dry_streak = currentDry;
+    } else {
+      currentDry = 0;
+    }
+  }
+
+  // Aktuální série sucha (dny od posledního deště do dneška)
+  let dry_streak = 0;
+  for (let i = days.length - 1; i >= 0; i--) {
+    if (days[i].max_rain === 0) {
+      dry_streak++;
+    } else {
+      break;
+    }
+  }
+
+  return {
+    ...row,
+    max_dry_streak,
+    dry_streak,
+  };
 }
 
-/** GET /api/stats — statistiky za všechna časová okna */
-async function handleStats(db, corsHdrs) {
+/** GET /api/stats — statistiky za všechna časová okna (optimalizováno do 2 dotazů) */
+async function getStatsData(db) {
   const now = Math.floor(Date.now() / 1000);
 
-  // Sdílený SQL dotaz pro základní metriky — jen přes parametrizovaný timestamp
-  const q = (cutoff) => db.prepare(`
-    SELECT ROUND(AVG(temp_out),1) avg_temp, ROUND(MAX(temp_out),1) max_temp,
-           ROUND(MIN(temp_out),1) min_temp, ROUND(AVG(humidity_out),0) avg_hum,
-           ROUND(AVG(temp_in),1) avg_temp_in, ROUND(MAX(temp_in),1) max_temp_in,
-           ROUND(MIN(temp_in),1) min_temp_in, ROUND(AVG(humidity_in),0) avg_hum_in,
-           MAX(humidity_in) max_hum_in, MIN(humidity_in) min_hum_in,
-           ROUND(MAX(wind_gust),1) max_gust,
-           ROUND(MAX(rain_total),1) max_rain,
-           COUNT(*) records
-    FROM measurements WHERE timestamp >= ?
-  `).bind(cutoff).first();
+  const c1h   = now - 3600;
+  const c24h  = now - 86400;
+  const c7d   = now - 7   * 86400;
+  const c30d  = now - 30  * 86400;
+  const c60d  = now - 60  * 86400;
+  const c90d  = now - 90  * 86400;
+  const c180d = now - 180 * 86400;
+  const c365d = now - 365 * 86400;
 
-  // Dotaz pro počet dešťových / suchých dní v období
-  const qRain = (cutoff) => db.prepare(`
+  // 1. Jediný SQL dotaz pro všech 9 časových oken pomocí podmíněných agregací.
+  // Projde celou tabulku measurements POUZE JEDNOU místo dřívějších 9 samostatných průchodů.
+  const statsPromise = db.prepare(`
     SELECT
-      SUM(CASE WHEN max_rain > 0 THEN 1 ELSE 0 END) AS rainy_days,
-      SUM(CASE WHEN max_rain = 0 THEN 1 ELSE 0 END) AS dry_days
-    FROM (
-      SELECT date(timestamp, 'unixepoch', '+1 hour') AS day,
-             MAX(rain_rate) AS max_rain
-      FROM measurements
-      WHERE timestamp >= ?
-      GROUP BY day
-    )
-  `).bind(cutoff).first();
+      -- 1h (?1)
+      ROUND(AVG(CASE WHEN timestamp >= ?1 THEN temp_out END),1) avg_temp_1h,
+      ROUND(MAX(CASE WHEN timestamp >= ?1 THEN temp_out END),1) max_temp_1h,
+      ROUND(MIN(CASE WHEN timestamp >= ?1 THEN temp_out END),1) min_temp_1h,
+      ROUND(AVG(CASE WHEN timestamp >= ?1 THEN humidity_out END),0) avg_hum_1h,
+      ROUND(AVG(CASE WHEN timestamp >= ?1 THEN temp_in END),1) avg_temp_in_1h,
+      ROUND(MAX(CASE WHEN timestamp >= ?1 THEN temp_in END),1) max_temp_in_1h,
+      ROUND(MIN(CASE WHEN timestamp >= ?1 THEN temp_in END),1) min_temp_in_1h,
+      ROUND(AVG(CASE WHEN timestamp >= ?1 THEN humidity_in END),0) avg_hum_in_1h,
+      MAX(CASE WHEN timestamp >= ?1 THEN humidity_in END) max_hum_in_1h,
+      MIN(CASE WHEN timestamp >= ?1 THEN humidity_in END) min_hum_in_1h,
+      ROUND(MAX(CASE WHEN timestamp >= ?1 THEN wind_gust END),1) max_gust_1h,
+      ROUND(MAX(CASE WHEN timestamp >= ?1 THEN rain_total END),1) max_rain_1h,
+      COUNT(CASE WHEN timestamp >= ?1 THEN 1 END) records_1h,
 
-  const cutoffs = [
-    now - 3600,           // 1h
-    now - 86400,          // 24h
-    now - 7   * 86400,    // 7d
-    now - 30  * 86400,    // 30d
-    now - 60  * 86400,    // 60d
-    now - 90  * 86400,    // 90d
-    now - 180 * 86400,    // 180d
-    now - 365 * 86400,    // 365d
-    0,                    // vše
-  ];
+      -- 24h (?2)
+      ROUND(AVG(CASE WHEN timestamp >= ?2 THEN temp_out END),1) avg_temp_24h,
+      ROUND(MAX(CASE WHEN timestamp >= ?2 THEN temp_out END),1) max_temp_24h,
+      ROUND(MIN(CASE WHEN timestamp >= ?2 THEN temp_out END),1) min_temp_24h,
+      ROUND(AVG(CASE WHEN timestamp >= ?2 THEN humidity_out END),0) avg_hum_24h,
+      ROUND(AVG(CASE WHEN timestamp >= ?2 THEN temp_in END),1) avg_temp_in_24h,
+      ROUND(MAX(CASE WHEN timestamp >= ?2 THEN temp_in END),1) max_temp_in_24h,
+      ROUND(MIN(CASE WHEN timestamp >= ?2 THEN temp_in END),1) min_temp_in_24h,
+      ROUND(AVG(CASE WHEN timestamp >= ?2 THEN humidity_in END),0) avg_hum_in_24h,
+      MAX(CASE WHEN timestamp >= ?2 THEN humidity_in END) max_hum_in_24h,
+      MIN(CASE WHEN timestamp >= ?2 THEN humidity_in END) min_hum_in_24h,
+      ROUND(MAX(CASE WHEN timestamp >= ?2 THEN wind_gust END),1) max_gust_24h,
+      ROUND(MAX(CASE WHEN timestamp >= ?2 THEN rain_total END),1) max_rain_24h,
+      COUNT(CASE WHEN timestamp >= ?2 THEN 1 END) records_24h,
 
-  const [h1, d1, d7, d30, d60, d90, d180, d365, all,
-         r1h, r24h, r7d, r30d, r60d, r90d, r180d, r365d, rAll] = await Promise.all([
-    ...cutoffs.map(c => q(c)),
-    ...cutoffs.map(c => qRain(c)),
-  ]);
+      -- 7d (?3)
+      ROUND(AVG(CASE WHEN timestamp >= ?3 THEN temp_out END),1) avg_temp_7d,
+      ROUND(MAX(CASE WHEN timestamp >= ?3 THEN temp_out END),1) max_temp_7d,
+      ROUND(MIN(CASE WHEN timestamp >= ?3 THEN temp_out END),1) min_temp_7d,
+      ROUND(AVG(CASE WHEN timestamp >= ?3 THEN humidity_out END),0) avg_hum_7d,
+      ROUND(AVG(CASE WHEN timestamp >= ?3 THEN temp_in END),1) avg_temp_in_7d,
+      ROUND(MAX(CASE WHEN timestamp >= ?3 THEN temp_in END),1) max_temp_in_7d,
+      ROUND(MIN(CASE WHEN timestamp >= ?3 THEN temp_in END),1) min_temp_in_7d,
+      ROUND(AVG(CASE WHEN timestamp >= ?3 THEN humidity_in END),0) avg_hum_in_7d,
+      MAX(CASE WHEN timestamp >= ?3 THEN humidity_in END) max_hum_in_7d,
+      MIN(CASE WHEN timestamp >= ?3 THEN humidity_in END) min_hum_in_7d,
+      ROUND(MAX(CASE WHEN timestamp >= ?3 THEN wind_gust END),1) max_gust_7d,
+      ROUND(MAX(CASE WHEN timestamp >= ?3 THEN rain_total END),1) max_rain_7d,
+      COUNT(CASE WHEN timestamp >= ?3 THEN 1 END) records_7d,
 
-  // Sloučí základní metriky s počty dešťových dní
-  const merge = (base, rain) => ({ ...base, ...rain });
+      -- 30d (?4)
+      ROUND(AVG(CASE WHEN timestamp >= ?4 THEN temp_out END),1) avg_temp_30d,
+      ROUND(MAX(CASE WHEN timestamp >= ?4 THEN temp_out END),1) max_temp_30d,
+      ROUND(MIN(CASE WHEN timestamp >= ?4 THEN temp_out END),1) min_temp_30d,
+      ROUND(AVG(CASE WHEN timestamp >= ?4 THEN humidity_out END),0) avg_hum_30d,
+      ROUND(AVG(CASE WHEN timestamp >= ?4 THEN temp_in END),1) avg_temp_in_30d,
+      ROUND(MAX(CASE WHEN timestamp >= ?4 THEN temp_in END),1) max_temp_in_30d,
+      ROUND(MIN(CASE WHEN timestamp >= ?4 THEN temp_in END),1) min_temp_in_30d,
+      ROUND(AVG(CASE WHEN timestamp >= ?4 THEN humidity_in END),0) avg_hum_in_30d,
+      MAX(CASE WHEN timestamp >= ?4 THEN humidity_in END) max_hum_in_30d,
+      MIN(CASE WHEN timestamp >= ?4 THEN humidity_in END) min_hum_in_30d,
+      ROUND(MAX(CASE WHEN timestamp >= ?4 THEN wind_gust END),1) max_gust_30d,
+      ROUND(MAX(CASE WHEN timestamp >= ?4 THEN rain_total END),1) max_rain_30d,
+      COUNT(CASE WHEN timestamp >= ?4 THEN 1 END) records_30d,
 
-  return jsonResponse(
-    {
-      last_1h:   merge(h1,   r1h),
-      last_24h:  merge(d1,   r24h),
-      last_7d:   merge(d7,   r7d),
-      last_30d:  merge(d30,  r30d),
-      last_60d:  merge(d60,  r60d),
-      last_90d:  merge(d90,  r90d),
-      last_180d: merge(d180, r180d),
-      last_365d: merge(d365, r365d),
-      all:       merge(all,  rAll),
-    },
-    200,
-    { ...corsHdrs, 'Cache-Control': 'public, max-age=120' },
-  );
+      -- 60d (?5)
+      ROUND(AVG(CASE WHEN timestamp >= ?5 THEN temp_out END),1) avg_temp_60d,
+      ROUND(MAX(CASE WHEN timestamp >= ?5 THEN temp_out END),1) max_temp_60d,
+      ROUND(MIN(CASE WHEN timestamp >= ?5 THEN temp_out END),1) min_temp_60d,
+      ROUND(AVG(CASE WHEN timestamp >= ?5 THEN humidity_out END),0) avg_hum_60d,
+      ROUND(AVG(CASE WHEN timestamp >= ?5 THEN temp_in END),1) avg_temp_in_60d,
+      ROUND(MAX(CASE WHEN timestamp >= ?5 THEN temp_in END),1) max_temp_in_60d,
+      ROUND(MIN(CASE WHEN timestamp >= ?5 THEN temp_in END),1) min_temp_in_60d,
+      ROUND(AVG(CASE WHEN timestamp >= ?5 THEN humidity_in END),0) avg_hum_in_60d,
+      MAX(CASE WHEN timestamp >= ?5 THEN humidity_in END) max_hum_in_60d,
+      MIN(CASE WHEN timestamp >= ?5 THEN humidity_in END) min_hum_in_60d,
+      ROUND(MAX(CASE WHEN timestamp >= ?5 THEN wind_gust END),1) max_gust_60d,
+      ROUND(MAX(CASE WHEN timestamp >= ?5 THEN rain_total END),1) max_rain_60d,
+      COUNT(CASE WHEN timestamp >= ?5 THEN 1 END) records_60d,
+
+      -- 90d (?6)
+      ROUND(AVG(CASE WHEN timestamp >= ?6 THEN temp_out END),1) avg_temp_90d,
+      ROUND(MAX(CASE WHEN timestamp >= ?6 THEN temp_out END),1) max_temp_90d,
+      ROUND(MIN(CASE WHEN timestamp >= ?6 THEN temp_out END),1) min_temp_90d,
+      ROUND(AVG(CASE WHEN timestamp >= ?6 THEN humidity_out END),0) avg_hum_90d,
+      ROUND(AVG(CASE WHEN timestamp >= ?6 THEN temp_in END),1) avg_temp_in_90d,
+      ROUND(MAX(CASE WHEN timestamp >= ?6 THEN temp_in END),1) max_temp_in_90d,
+      ROUND(MIN(CASE WHEN timestamp >= ?6 THEN temp_in END),1) min_temp_in_90d,
+      ROUND(AVG(CASE WHEN timestamp >= ?6 THEN humidity_in END),0) avg_hum_in_90d,
+      MAX(CASE WHEN timestamp >= ?6 THEN humidity_in END) max_hum_in_90d,
+      MIN(CASE WHEN timestamp >= ?6 THEN humidity_in END) min_hum_in_90d,
+      ROUND(MAX(CASE WHEN timestamp >= ?6 THEN wind_gust END),1) max_gust_90d,
+      ROUND(MAX(CASE WHEN timestamp >= ?6 THEN rain_total END),1) max_rain_90d,
+      COUNT(CASE WHEN timestamp >= ?6 THEN 1 END) records_90d,
+
+      -- 180d (?7)
+      ROUND(AVG(CASE WHEN timestamp >= ?7 THEN temp_out END),1) avg_temp_180d,
+      ROUND(MAX(CASE WHEN timestamp >= ?7 THEN temp_out END),1) max_temp_180d,
+      ROUND(MIN(CASE WHEN timestamp >= ?7 THEN temp_out END),1) min_temp_180d,
+      ROUND(AVG(CASE WHEN timestamp >= ?7 THEN humidity_out END),0) avg_hum_180d,
+      ROUND(AVG(CASE WHEN timestamp >= ?7 THEN temp_in END),1) avg_temp_in_180d,
+      ROUND(MAX(CASE WHEN timestamp >= ?7 THEN temp_in END),1) max_temp_in_180d,
+      ROUND(MIN(CASE WHEN timestamp >= ?7 THEN temp_in END),1) min_temp_in_180d,
+      ROUND(AVG(CASE WHEN timestamp >= ?7 THEN humidity_in END),0) avg_hum_in_180d,
+      MAX(CASE WHEN timestamp >= ?7 THEN humidity_in END) max_hum_in_180d,
+      MIN(CASE WHEN timestamp >= ?7 THEN humidity_in END) min_hum_in_180d,
+      ROUND(MAX(CASE WHEN timestamp >= ?7 THEN wind_gust END),1) max_gust_180d,
+      ROUND(MAX(CASE WHEN timestamp >= ?7 THEN rain_total END),1) max_rain_180d,
+      COUNT(CASE WHEN timestamp >= ?7 THEN 1 END) records_180d,
+
+      -- 365d (?8)
+      ROUND(AVG(CASE WHEN timestamp >= ?8 THEN temp_out END),1) avg_temp_365d,
+      ROUND(MAX(CASE WHEN timestamp >= ?8 THEN temp_out END),1) max_temp_365d,
+      ROUND(MIN(CASE WHEN timestamp >= ?8 THEN temp_out END),1) min_temp_365d,
+      ROUND(AVG(CASE WHEN timestamp >= ?8 THEN humidity_out END),0) avg_hum_365d,
+      ROUND(AVG(CASE WHEN timestamp >= ?8 THEN temp_in END),1) avg_temp_in_365d,
+      ROUND(MAX(CASE WHEN timestamp >= ?8 THEN temp_in END),1) max_temp_in_365d,
+      ROUND(MIN(CASE WHEN timestamp >= ?8 THEN temp_in END),1) min_temp_in_365d,
+      ROUND(AVG(CASE WHEN timestamp >= ?8 THEN humidity_in END),0) avg_hum_in_365d,
+      MAX(CASE WHEN timestamp >= ?8 THEN humidity_in END) max_hum_in_365d,
+      MIN(CASE WHEN timestamp >= ?8 THEN humidity_in END) min_hum_in_365d,
+      ROUND(MAX(CASE WHEN timestamp >= ?8 THEN wind_gust END),1) max_gust_365d,
+      ROUND(MAX(CASE WHEN timestamp >= ?8 THEN rain_total END),1) max_rain_365d,
+      COUNT(CASE WHEN timestamp >= ?8 THEN 1 END) records_365d,
+
+      -- all (celá historie)
+      ROUND(AVG(temp_out),1) avg_temp_all,
+      ROUND(MAX(temp_out),1) max_temp_all,
+      ROUND(MIN(temp_out),1) min_temp_all,
+      ROUND(AVG(humidity_out),0) avg_hum_all,
+      ROUND(AVG(temp_in),1) avg_temp_in_all,
+      ROUND(MAX(temp_in),1) max_temp_in_all,
+      ROUND(MIN(temp_in),1) min_temp_in_all,
+      ROUND(AVG(humidity_in),0) avg_hum_in_all,
+      MAX(humidity_in) max_hum_in_all,
+      MIN(humidity_in) min_hum_in_all,
+      ROUND(MAX(wind_gust),1) max_gust_all,
+      ROUND(MAX(rain_total),1) max_rain_all,
+      COUNT(*) records_all
+    FROM measurements
+  `).bind(c1h, c24h, c7d, c30d, c60d, c90d, c180d, c365d).first();
+
+  // 2. Denní přehled pro deštivé / suché dny v paměti (nahrazuje 9 samostatných SQL dotazů)
+  const daysPromise = db.prepare(`
+    SELECT date(timestamp, 'unixepoch', '+1 hour') AS day,
+           MIN(timestamp) AS start_ts,
+           MAX(timestamp) AS end_ts,
+           MAX(rain_rate) AS max_rain
+    FROM measurements
+    GROUP BY day
+    ORDER BY day ASC
+  `).all();
+
+  const [row, daysRes] = await Promise.all([statsPromise, daysPromise]);
+  const days = daysRes?.results ?? [];
+
+  // Výpočet dešťových dnů pro daný časový limit v paměti (0 D1 row reads)
+  function getRainStats(cutoff) {
+    let rainy = 0;
+    let dry = 0;
+    for (const d of days) {
+      if (cutoff === 0 || d.end_ts >= cutoff) {
+        if (d.max_rain > 0) {
+          rainy++;
+        } else {
+          dry++;
+        }
+      }
+    }
+    return { rainy_days: rainy, dry_days: dry };
+  }
+
+  function extractPeriod(suf, rain) {
+    return {
+      avg_temp:    row?.[`avg_temp_${suf}`] ?? null,
+      max_temp:    row?.[`max_temp_${suf}`] ?? null,
+      min_temp:    row?.[`min_temp_${suf}`] ?? null,
+      avg_hum:     row?.[`avg_hum_${suf}`] ?? null,
+      avg_temp_in: row?.[`avg_temp_in_${suf}`] ?? null,
+      max_temp_in: row?.[`max_temp_in_${suf}`] ?? null,
+      min_temp_in: row?.[`min_temp_in_${suf}`] ?? null,
+      avg_hum_in:  row?.[`avg_hum_in_${suf}`] ?? null,
+      max_hum_in:  row?.[`max_hum_in_${suf}`] ?? null,
+      min_hum_in:  row?.[`min_hum_in_${suf}`] ?? null,
+      max_gust:    row?.[`max_gust_${suf}`] ?? null,
+      max_rain:    row?.[`max_rain_${suf}`] ?? null,
+      records:     row?.[`records_${suf}`] ?? 0,
+      rainy_days:  rain.rainy_days,
+      dry_days:    rain.dry_days,
+    };
+  }
+
+  return {
+    last_1h:   extractPeriod('1h',   getRainStats(c1h)),
+    last_24h:  extractPeriod('24h',  getRainStats(c24h)),
+    last_7d:   extractPeriod('7d',   getRainStats(c7d)),
+    last_30d:  extractPeriod('30d',  getRainStats(c30d)),
+    last_60d:  extractPeriod('60d',  getRainStats(c60d)),
+    last_90d:  extractPeriod('90d',  getRainStats(c90d)),
+    last_180d: extractPeriod('180d', getRainStats(c180d)),
+    last_365d: extractPeriod('365d', getRainStats(c365d)),
+    all:       extractPeriod('all',  getRainStats(0)),
+  };
 }
 
 // ─── Hlavní fetch handler ─────────────────────────────────────────────────────
@@ -513,22 +698,45 @@ async function handleFetch(request, env, ctx) {
     return errorResponse('Metoda není povolena', 405, corsHdrs);
   }
 
-  // Cache API pro /api/current
-  const cache    = caches.default;
-  const cacheKey = new Request(`${url.origin}/api/current`, request);
-
-  const path = url.pathname;
+  // Cache API
+  const cache = caches.default;
+  const path  = url.pathname;
 
   try {
-    if (path === '/api/current') return await handleCurrent(env.DB, corsHdrs, cache, cacheKey);
-    if (path === '/api/history') return await handleHistory(env.DB, url, corsHdrs);
-    if (path === '/api/daily')   return await handleDaily(env.DB, url, corsHdrs);
-    if (path === '/api/records') return await handleRecords(env.DB, corsHdrs);
-    if (path === '/api/stats')   return await handleStats(env.DB, corsHdrs);
-    if (path === '/api/test-wc') return await handleTestWeathercloud(env, corsHdrs);
+    if (path === '/api/current') {
+      const cacheKey = new Request(`${url.origin}/api/current`, { method: 'GET' });
+      return await handleCachedEndpoint(cache, cacheKey, CACHE_CURRENT_TTL, corsHdrs, ctx, () => getCurrentData(env.DB));
+    }
+
+    if (path === '/api/records') {
+      const cacheKey = new Request(`${url.origin}/api/records`, { method: 'GET' });
+      return await handleCachedEndpoint(cache, cacheKey, CACHE_RECORDS_TTL, corsHdrs, ctx, () => getRecordsData(env.DB));
+    }
+
+    if (path === '/api/stats') {
+      const cacheKey = new Request(`${url.origin}/api/stats`, { method: 'GET' });
+      return await handleCachedEndpoint(cache, cacheKey, CACHE_STATS_TTL, corsHdrs, ctx, () => getStatsData(env.DB));
+    }
+
+    if (path === '/api/history') {
+      const cacheKey = new Request(url.toString(), { method: 'GET' });
+      return await handleCachedEndpoint(cache, cacheKey, CACHE_HISTORY_TTL, corsHdrs, ctx, () => fetchHistoryData(env.DB, url));
+    }
+
+    if (path === '/api/daily') {
+      const cacheKey = new Request(url.toString(), { method: 'GET' });
+      return await handleCachedEndpoint(cache, cacheKey, CACHE_DAILY_TTL, corsHdrs, ctx, () => fetchDailyData(env.DB, url));
+    }
+
+    if (path === '/api/test-wc') {
+      return await handleTestWeathercloud(env, corsHdrs);
+    }
 
     return errorResponse('Endpoint neexistuje', 404, corsHdrs);
   } catch (err) {
+    if (err.status === 400 || err.status === 404) {
+      return errorResponse(err.message, err.status, corsHdrs);
+    }
     // Interní chyba — logujeme detaily, uživateli pošleme jen obecnou zprávu
     console.error('[FETCH] Interní chyba:', err.message);
     return errorResponse('Interní chyba serveru', 500, corsHdrs);

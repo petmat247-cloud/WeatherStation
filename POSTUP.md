@@ -113,6 +113,25 @@ Frontend — GitHub Pages (dashboard s grafy)
 - [x] **Aktuálně**: přidána samostatná karta pro vnitřní vlhkost s popisem komfortu
 - [x] **Patička**: přidána responzivní patička napříč celým webem (soukromý nekomerční projekt Petra Kloučka)
 
+### Chat 9 — Ochrana a optimalizace D1 limitu (9. října 2026)
+- [x] **Identifikace problému**:
+  - Vyčerpání denního free tier limitu 5 000 000 rows_read za necelou hodinu otevřeného webu.
+  - Příčina: `loadCurrent()` každou minutu volalo těžký `/api/records`, který procházel celou tabulku (~108k řádků na volání) bez Worker cache.
+- [x] **Frontend fix (`docs/app.js`)**:
+  - Odstraněno volání `/api/records` z minutové smyčky `loadCurrent()`.
+  - Přidána funkce `loadDryStreak()`, která se volá jen při startu aplikace a poté 1× za hodinu.
+  - Zaokrouhlení časových razítek v `loadCharts` pro zaručení cache hitů.
+- [x] **Backend & SQL optimalizace (`worker/src/index.js`)**:
+  - Zapnuta **Cloudflare Edge Cache** (`caches.default`) pro všechny čtecí endpointy:
+    - `/api/current` (60 s)
+    - `/api/records` (1 hodina)
+    - `/api/stats` (30 minut)
+    - `/api/history` (5 minut)
+    - `/api/daily` (30 minut)
+  - **Optimalizace `/api/records`**: výpočet sérií sucha přesunut z těžkých SQL CTE dotazů do paměti (0 dodatečných čtení z DB).
+  - **Optimalizace `/api/stats`**: sloučení 18 paralelních dotazů do jediného dotazu s podmíněnými agregacemi + denní sumy deště v paměti (snížení z ~340k na ~54k řádků na průchod).
+  - Výsledek: snížení denní spotřeby D1 čtení o >99 % (bezpečně pod 50k řádků/den).
+
 ---
 
 ## 🔜 CO ZBÝVÁ

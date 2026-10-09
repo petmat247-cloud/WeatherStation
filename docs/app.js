@@ -146,20 +146,33 @@ async function loadCurrent() {
     document.getElementById('val-rain-rate').textContent  = fmt(data.rain_rate);
     document.getElementById('val-rain-total').textContent = fmt(data.rain_total);
 
+    // Pokud právě prší, série sucha je okamžitě 0
+    if ((data.rain_rate && data.rain_rate > 0) || (data.rain_total && data.rain_total > 0)) {
+      const el = document.getElementById('val-dry-streak');
+      if (el) el.textContent = '0';
+    }
+
     setStatus('online', `Online · ${relativeTime(data.timestamp)}`);
     hideError('current-error');
-
-    // Dní bez deště — načteme souběžně z /api/records (cachovano 5 min)
-    fetch(`${API}/api/records`)
-      .then(r => r.json())
-      .then(rec => {
-        const el = document.getElementById('val-dry-streak');
-        if (el) el.textContent = rec.dry_streak ?? '—';
-      })
-      .catch(() => {}); // tiše ignorujeme chybu, hlavní data jsou důležitější
   } catch (e) {
     setStatus('error', 'Chyba připojení');
     showError('current-error', `Nepodařilo se načíst aktuální data: ${e.message}`);
+  }
+}
+
+// ── Série sucha (načítá se samostatně, nemění se po minutách) ───────────────
+
+async function loadDryStreak() {
+  try {
+    const res = await fetch(`${API}/api/records`);
+    if (!res.ok) return;
+    const rec = await res.json();
+    const el = document.getElementById('val-dry-streak');
+    if (el && rec.dry_streak !== undefined) {
+      el.textContent = rec.dry_streak ?? '—';
+    }
+  } catch (_) {
+    // tiše ignorujeme chybu, karta má výchozí pomlčku
   }
 }
 
@@ -304,9 +317,12 @@ function lineDataset(rows, key, label, color, filled = false) {
 }
 
 async function loadCharts(range) {
-  const now  = Math.floor(Date.now() / 1000);
-  const from = now - rangeToSeconds(range);
-  const lim  = rangeToLimit(range);
+  // Zaokrouhlení času pro efektivní využití Cloudflare Edge Cache
+  const nowRaw  = Math.floor(Date.now() / 1000);
+  const stepSec = (range === '1h' || range === '24h') ? 60 : 300;
+  const now     = Math.floor(nowRaw / stepSec) * stepSec;
+  const from    = now - rangeToSeconds(range);
+  const lim     = rangeToLimit(range);
 
   try {
     const res = await fetch(`${API}/api/history?from=${from}&to=${now}&limit=${lim}`);
@@ -582,6 +598,10 @@ async function loadRecords() {
         </div>
       </div>`;
 
+    // Aktualizujeme i kartu na hlavní obrazovce pokud existuje
+    const dryEl = document.getElementById('val-dry-streak');
+    if (dryEl && r.dry_streak !== undefined) dryEl.textContent = r.dry_streak ?? '—';
+
     hideError('records-error');
     recordsLoaded = true;
   } catch (e) {
@@ -643,8 +663,8 @@ document.querySelectorAll('.range-btn').forEach(btn => {
 // ── Automatická obnova ───────────────────────────────────────────────────────
 
 function startAutoRefresh() {
+  // Živá data se obnovují každou minutu
   setInterval(() => {
-    // Vždy obnovuj aktuální data
     loadCurrent();
 
     // Obnov grafy, pokud je záložka aktivní
@@ -654,10 +674,14 @@ function startAutoRefresh() {
       loadCharts(currentRange);
     }
   }, REFRESH_MS);
+
+  // Série sucha stačí obnovit 1× za hodinu (nemění se po minutách)
+  setInterval(loadDryStreak, 3600_000);
 }
 
 // ── Inicializace aplikace ────────────────────────────────────────────────────
 
 initTheme();
 loadCurrent();
+loadDryStreak();
 startAutoRefresh();
