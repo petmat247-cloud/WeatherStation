@@ -318,8 +318,11 @@ function lineDataset(rows, key, label, color, filled = false) {
 
 async function loadCharts(range) {
   // Zaokrouhlení času pro efektivní využití Cloudflare Edge Cache
+  let stepSec = 60; // 1h, 24h
+  if (['7d', '30d'].includes(range)) stepSec = 3600; // 1 hodina
+  else if (['60d', '90d', '180d', '365d', 'all'].includes(range)) stepSec = 86400; // 1 den
+
   const nowRaw  = Math.floor(Date.now() / 1000);
-  const stepSec = (range === '1h' || range === '24h') ? 60 : 300;
   const now     = Math.floor(nowRaw / stepSec) * stepSec;
   const from    = now - rangeToSeconds(range);
   const lim     = rangeToLimit(range);
