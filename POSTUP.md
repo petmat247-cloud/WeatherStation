@@ -222,3 +222,23 @@ Stanice/
 | Live data od | 2. října 2026, roste každou minutu |
 | Rozsahy grafů | 1h / 24h / 7d / 30d / 60d / 90d / 180d / 365d / Vše |
 | Downsampling | GROUP BY bucket → vždy ~1 440 bodů rovnoměrně přes celý rozsah |
+Chat 10 (Bug Fix - SQLite column limit):
+- Split the massive 117-column conditional aggregation SQL query in getStatsData into 3 smaller queries.
+- Deployed the worker to Cloudflare.
+- Verified /api/stats now correctly returns 200 OK and cache is re-enabled.
+
+Chat 10 - Part 2 (Cache Optimization & D1 Reads):
+- Modified app.js to cache 7d/30d historical ranges for 1 hour, and 60d+ for 24 hours.
+- Pushed app.js to GitHub Pages.
+- Added WHERE timestamp >= bounds to stats queries to prevent full table scans and utilize the index.
+- Deployed the optimized worker to Cloudflare.
+
+Chat 11 — Nasazení nového Liquid Glass designu (26. října 2026):
+- Původní web přesunut do složky `docs/old/` (`index.html`, `style.css`, `app.js`).
+- Nový web s designem Liquid Glass nastaven jako hlavní výchozí web v kořeni `docs/` (`index.html`, `styles.css`, `script.js`).
+- Vytvořen modul `docs/api.js` — plné napojení na Cloudflare Worker API:
+  - **Aktuálně**: `/api/current` + `/api/records` (automatická obnova každou minutu, animace rtuti, vlhkosti, tlaku i kompasu větru).
+  - **Grafy**: `/api/history` pro 9 časových oken (1h až Vše) s vykreslováním do vlastních Liquid Glass SVG grafů.
+  - **Statistiky**: `/api/stats` přímo mapované do 9 karet bez nutnosti stahovat statisíce záznamů.
+  - **Rekordy**: `/api/records` mapované do 18 karet rekordů a widgetu historie.
+- Přidána skleněná přepínací tlačítka v hlavičkách pro okamžité přepínání mezi novým a starým webem.

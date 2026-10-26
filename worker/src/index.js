@@ -31,8 +31,8 @@
 const WU_API_BASE        = 'https://api.weather.com/v2/pws/observations/current';
 const CACHE_CURRENT_TTL  = 60;   // 1 minuta — cache pro /api/current
 const CACHE_RECORDS_TTL  = 3600; // 1 hodina — cache pro /api/records
-const CACHE_STATS_TTL    = 1800; // 30 minut — cache pro /api/stats
-const CACHE_HISTORY_TTL  = 300;  // 5 minut — cache pro /api/history
+const CACHE_STATS_TTL    = 3600; // 1 hodina — cache pro /api/stats
+const CACHE_HISTORY_TTL  = 300;  // 5 minut — cache pro /api/history (výchozí)
 const CACHE_DAILY_TTL    = 1800; // 30 minut — cache pro /api/daily
 const MAX_LIMIT          = 2880; // max záznamů pro /api/history
 const MAX_DAYS           = 365;  // max počet dní pro /api/daily
@@ -476,129 +476,138 @@ async function getStatsData(db) {
   const c180d = now - 180 * 86400;
   const c365d = now - 365 * 86400;
 
-  // 1. Jediný SQL dotaz pro všech 9 časových oken pomocí podmíněných agregací.
-  // Projde celou tabulku measurements POUZE JEDNOU místo dřívějších 9 samostatných průchodů.
-  const statsPromise = db.prepare(`
+  // 1. Tři menší SQL dotazy pro časová okna (obchází SQLite limit 100 sloupců na výsledek).
+  const statsPromise1 = db.prepare(`
     SELECT
-      -- 1h (?1)
-      ROUND(AVG(CASE WHEN timestamp >= ?1 THEN temp_out END),1) avg_temp_1h,
-      ROUND(MAX(CASE WHEN timestamp >= ?1 THEN temp_out END),1) max_temp_1h,
-      ROUND(MIN(CASE WHEN timestamp >= ?1 THEN temp_out END),1) min_temp_1h,
-      ROUND(AVG(CASE WHEN timestamp >= ?1 THEN humidity_out END),0) avg_hum_1h,
-      ROUND(AVG(CASE WHEN timestamp >= ?1 THEN temp_in END),1) avg_temp_in_1h,
-      ROUND(MAX(CASE WHEN timestamp >= ?1 THEN temp_in END),1) max_temp_in_1h,
-      ROUND(MIN(CASE WHEN timestamp >= ?1 THEN temp_in END),1) min_temp_in_1h,
-      ROUND(AVG(CASE WHEN timestamp >= ?1 THEN humidity_in END),0) avg_hum_in_1h,
-      MAX(CASE WHEN timestamp >= ?1 THEN humidity_in END) max_hum_in_1h,
-      MIN(CASE WHEN timestamp >= ?1 THEN humidity_in END) min_hum_in_1h,
-      ROUND(MAX(CASE WHEN timestamp >= ?1 THEN wind_gust END),1) max_gust_1h,
-      ROUND(MAX(CASE WHEN timestamp >= ?1 THEN rain_total END),1) max_rain_1h,
-      COUNT(CASE WHEN timestamp >= ?1 THEN 1 END) records_1h,
+      -- 1h
+      ROUND(AVG(CASE WHEN timestamp >= ${c1h} THEN temp_out END),1) avg_temp_1h,
+      ROUND(MAX(CASE WHEN timestamp >= ${c1h} THEN temp_out END),1) max_temp_1h,
+      ROUND(MIN(CASE WHEN timestamp >= ${c1h} THEN temp_out END),1) min_temp_1h,
+      ROUND(AVG(CASE WHEN timestamp >= ${c1h} THEN humidity_out END),0) avg_hum_1h,
+      ROUND(AVG(CASE WHEN timestamp >= ${c1h} THEN temp_in END),1) avg_temp_in_1h,
+      ROUND(MAX(CASE WHEN timestamp >= ${c1h} THEN temp_in END),1) max_temp_in_1h,
+      ROUND(MIN(CASE WHEN timestamp >= ${c1h} THEN temp_in END),1) min_temp_in_1h,
+      ROUND(AVG(CASE WHEN timestamp >= ${c1h} THEN humidity_in END),0) avg_hum_in_1h,
+      MAX(CASE WHEN timestamp >= ${c1h} THEN humidity_in END) max_hum_in_1h,
+      MIN(CASE WHEN timestamp >= ${c1h} THEN humidity_in END) min_hum_in_1h,
+      ROUND(MAX(CASE WHEN timestamp >= ${c1h} THEN wind_gust END),1) max_gust_1h,
+      ROUND(MAX(CASE WHEN timestamp >= ${c1h} THEN rain_total END),1) max_rain_1h,
+      COUNT(CASE WHEN timestamp >= ${c1h} THEN 1 END) records_1h,
 
-      -- 24h (?2)
-      ROUND(AVG(CASE WHEN timestamp >= ?2 THEN temp_out END),1) avg_temp_24h,
-      ROUND(MAX(CASE WHEN timestamp >= ?2 THEN temp_out END),1) max_temp_24h,
-      ROUND(MIN(CASE WHEN timestamp >= ?2 THEN temp_out END),1) min_temp_24h,
-      ROUND(AVG(CASE WHEN timestamp >= ?2 THEN humidity_out END),0) avg_hum_24h,
-      ROUND(AVG(CASE WHEN timestamp >= ?2 THEN temp_in END),1) avg_temp_in_24h,
-      ROUND(MAX(CASE WHEN timestamp >= ?2 THEN temp_in END),1) max_temp_in_24h,
-      ROUND(MIN(CASE WHEN timestamp >= ?2 THEN temp_in END),1) min_temp_in_24h,
-      ROUND(AVG(CASE WHEN timestamp >= ?2 THEN humidity_in END),0) avg_hum_in_24h,
-      MAX(CASE WHEN timestamp >= ?2 THEN humidity_in END) max_hum_in_24h,
-      MIN(CASE WHEN timestamp >= ?2 THEN humidity_in END) min_hum_in_24h,
-      ROUND(MAX(CASE WHEN timestamp >= ?2 THEN wind_gust END),1) max_gust_24h,
-      ROUND(MAX(CASE WHEN timestamp >= ?2 THEN rain_total END),1) max_rain_24h,
-      COUNT(CASE WHEN timestamp >= ?2 THEN 1 END) records_24h,
+      -- 24h
+      ROUND(AVG(CASE WHEN timestamp >= ${c24h} THEN temp_out END),1) avg_temp_24h,
+      ROUND(MAX(CASE WHEN timestamp >= ${c24h} THEN temp_out END),1) max_temp_24h,
+      ROUND(MIN(CASE WHEN timestamp >= ${c24h} THEN temp_out END),1) min_temp_24h,
+      ROUND(AVG(CASE WHEN timestamp >= ${c24h} THEN humidity_out END),0) avg_hum_24h,
+      ROUND(AVG(CASE WHEN timestamp >= ${c24h} THEN temp_in END),1) avg_temp_in_24h,
+      ROUND(MAX(CASE WHEN timestamp >= ${c24h} THEN temp_in END),1) max_temp_in_24h,
+      ROUND(MIN(CASE WHEN timestamp >= ${c24h} THEN temp_in END),1) min_temp_in_24h,
+      ROUND(AVG(CASE WHEN timestamp >= ${c24h} THEN humidity_in END),0) avg_hum_in_24h,
+      MAX(CASE WHEN timestamp >= ${c24h} THEN humidity_in END) max_hum_in_24h,
+      MIN(CASE WHEN timestamp >= ${c24h} THEN humidity_in END) min_hum_in_24h,
+      ROUND(MAX(CASE WHEN timestamp >= ${c24h} THEN wind_gust END),1) max_gust_24h,
+      ROUND(MAX(CASE WHEN timestamp >= ${c24h} THEN rain_total END),1) max_rain_24h,
+      COUNT(CASE WHEN timestamp >= ${c24h} THEN 1 END) records_24h,
 
-      -- 7d (?3)
-      ROUND(AVG(CASE WHEN timestamp >= ?3 THEN temp_out END),1) avg_temp_7d,
-      ROUND(MAX(CASE WHEN timestamp >= ?3 THEN temp_out END),1) max_temp_7d,
-      ROUND(MIN(CASE WHEN timestamp >= ?3 THEN temp_out END),1) min_temp_7d,
-      ROUND(AVG(CASE WHEN timestamp >= ?3 THEN humidity_out END),0) avg_hum_7d,
-      ROUND(AVG(CASE WHEN timestamp >= ?3 THEN temp_in END),1) avg_temp_in_7d,
-      ROUND(MAX(CASE WHEN timestamp >= ?3 THEN temp_in END),1) max_temp_in_7d,
-      ROUND(MIN(CASE WHEN timestamp >= ?3 THEN temp_in END),1) min_temp_in_7d,
-      ROUND(AVG(CASE WHEN timestamp >= ?3 THEN humidity_in END),0) avg_hum_in_7d,
-      MAX(CASE WHEN timestamp >= ?3 THEN humidity_in END) max_hum_in_7d,
-      MIN(CASE WHEN timestamp >= ?3 THEN humidity_in END) min_hum_in_7d,
-      ROUND(MAX(CASE WHEN timestamp >= ?3 THEN wind_gust END),1) max_gust_7d,
-      ROUND(MAX(CASE WHEN timestamp >= ?3 THEN rain_total END),1) max_rain_7d,
-      COUNT(CASE WHEN timestamp >= ?3 THEN 1 END) records_7d,
+      -- 7d
+      ROUND(AVG(CASE WHEN timestamp >= ${c7d} THEN temp_out END),1) avg_temp_7d,
+      ROUND(MAX(CASE WHEN timestamp >= ${c7d} THEN temp_out END),1) max_temp_7d,
+      ROUND(MIN(CASE WHEN timestamp >= ${c7d} THEN temp_out END),1) min_temp_7d,
+      ROUND(AVG(CASE WHEN timestamp >= ${c7d} THEN humidity_out END),0) avg_hum_7d,
+      ROUND(AVG(CASE WHEN timestamp >= ${c7d} THEN temp_in END),1) avg_temp_in_7d,
+      ROUND(MAX(CASE WHEN timestamp >= ${c7d} THEN temp_in END),1) max_temp_in_7d,
+      ROUND(MIN(CASE WHEN timestamp >= ${c7d} THEN temp_in END),1) min_temp_in_7d,
+      ROUND(AVG(CASE WHEN timestamp >= ${c7d} THEN humidity_in END),0) avg_hum_in_7d,
+      MAX(CASE WHEN timestamp >= ${c7d} THEN humidity_in END) max_hum_in_7d,
+      MIN(CASE WHEN timestamp >= ${c7d} THEN humidity_in END) min_hum_in_7d,
+      ROUND(MAX(CASE WHEN timestamp >= ${c7d} THEN wind_gust END),1) max_gust_7d,
+      ROUND(MAX(CASE WHEN timestamp >= ${c7d} THEN rain_total END),1) max_rain_7d,
+      COUNT(CASE WHEN timestamp >= ${c7d} THEN 1 END) records_7d
+    FROM measurements
+    WHERE timestamp >= ${c7d}
+  `).first();
 
-      -- 30d (?4)
-      ROUND(AVG(CASE WHEN timestamp >= ?4 THEN temp_out END),1) avg_temp_30d,
-      ROUND(MAX(CASE WHEN timestamp >= ?4 THEN temp_out END),1) max_temp_30d,
-      ROUND(MIN(CASE WHEN timestamp >= ?4 THEN temp_out END),1) min_temp_30d,
-      ROUND(AVG(CASE WHEN timestamp >= ?4 THEN humidity_out END),0) avg_hum_30d,
-      ROUND(AVG(CASE WHEN timestamp >= ?4 THEN temp_in END),1) avg_temp_in_30d,
-      ROUND(MAX(CASE WHEN timestamp >= ?4 THEN temp_in END),1) max_temp_in_30d,
-      ROUND(MIN(CASE WHEN timestamp >= ?4 THEN temp_in END),1) min_temp_in_30d,
-      ROUND(AVG(CASE WHEN timestamp >= ?4 THEN humidity_in END),0) avg_hum_in_30d,
-      MAX(CASE WHEN timestamp >= ?4 THEN humidity_in END) max_hum_in_30d,
-      MIN(CASE WHEN timestamp >= ?4 THEN humidity_in END) min_hum_in_30d,
-      ROUND(MAX(CASE WHEN timestamp >= ?4 THEN wind_gust END),1) max_gust_30d,
-      ROUND(MAX(CASE WHEN timestamp >= ?4 THEN rain_total END),1) max_rain_30d,
-      COUNT(CASE WHEN timestamp >= ?4 THEN 1 END) records_30d,
+  const statsPromise2 = db.prepare(`
+    SELECT
+      -- 30d
+      ROUND(AVG(CASE WHEN timestamp >= ${c30d} THEN temp_out END),1) avg_temp_30d,
+      ROUND(MAX(CASE WHEN timestamp >= ${c30d} THEN temp_out END),1) max_temp_30d,
+      ROUND(MIN(CASE WHEN timestamp >= ${c30d} THEN temp_out END),1) min_temp_30d,
+      ROUND(AVG(CASE WHEN timestamp >= ${c30d} THEN humidity_out END),0) avg_hum_30d,
+      ROUND(AVG(CASE WHEN timestamp >= ${c30d} THEN temp_in END),1) avg_temp_in_30d,
+      ROUND(MAX(CASE WHEN timestamp >= ${c30d} THEN temp_in END),1) max_temp_in_30d,
+      ROUND(MIN(CASE WHEN timestamp >= ${c30d} THEN temp_in END),1) min_temp_in_30d,
+      ROUND(AVG(CASE WHEN timestamp >= ${c30d} THEN humidity_in END),0) avg_hum_in_30d,
+      MAX(CASE WHEN timestamp >= ${c30d} THEN humidity_in END) max_hum_in_30d,
+      MIN(CASE WHEN timestamp >= ${c30d} THEN humidity_in END) min_hum_in_30d,
+      ROUND(MAX(CASE WHEN timestamp >= ${c30d} THEN wind_gust END),1) max_gust_30d,
+      ROUND(MAX(CASE WHEN timestamp >= ${c30d} THEN rain_total END),1) max_rain_30d,
+      COUNT(CASE WHEN timestamp >= ${c30d} THEN 1 END) records_30d,
 
-      -- 60d (?5)
-      ROUND(AVG(CASE WHEN timestamp >= ?5 THEN temp_out END),1) avg_temp_60d,
-      ROUND(MAX(CASE WHEN timestamp >= ?5 THEN temp_out END),1) max_temp_60d,
-      ROUND(MIN(CASE WHEN timestamp >= ?5 THEN temp_out END),1) min_temp_60d,
-      ROUND(AVG(CASE WHEN timestamp >= ?5 THEN humidity_out END),0) avg_hum_60d,
-      ROUND(AVG(CASE WHEN timestamp >= ?5 THEN temp_in END),1) avg_temp_in_60d,
-      ROUND(MAX(CASE WHEN timestamp >= ?5 THEN temp_in END),1) max_temp_in_60d,
-      ROUND(MIN(CASE WHEN timestamp >= ?5 THEN temp_in END),1) min_temp_in_60d,
-      ROUND(AVG(CASE WHEN timestamp >= ?5 THEN humidity_in END),0) avg_hum_in_60d,
-      MAX(CASE WHEN timestamp >= ?5 THEN humidity_in END) max_hum_in_60d,
-      MIN(CASE WHEN timestamp >= ?5 THEN humidity_in END) min_hum_in_60d,
-      ROUND(MAX(CASE WHEN timestamp >= ?5 THEN wind_gust END),1) max_gust_60d,
-      ROUND(MAX(CASE WHEN timestamp >= ?5 THEN rain_total END),1) max_rain_60d,
-      COUNT(CASE WHEN timestamp >= ?5 THEN 1 END) records_60d,
+      -- 60d
+      ROUND(AVG(CASE WHEN timestamp >= ${c60d} THEN temp_out END),1) avg_temp_60d,
+      ROUND(MAX(CASE WHEN timestamp >= ${c60d} THEN temp_out END),1) max_temp_60d,
+      ROUND(MIN(CASE WHEN timestamp >= ${c60d} THEN temp_out END),1) min_temp_60d,
+      ROUND(AVG(CASE WHEN timestamp >= ${c60d} THEN humidity_out END),0) avg_hum_60d,
+      ROUND(AVG(CASE WHEN timestamp >= ${c60d} THEN temp_in END),1) avg_temp_in_60d,
+      ROUND(MAX(CASE WHEN timestamp >= ${c60d} THEN temp_in END),1) max_temp_in_60d,
+      ROUND(MIN(CASE WHEN timestamp >= ${c60d} THEN temp_in END),1) min_temp_in_60d,
+      ROUND(AVG(CASE WHEN timestamp >= ${c60d} THEN humidity_in END),0) avg_hum_in_60d,
+      MAX(CASE WHEN timestamp >= ${c60d} THEN humidity_in END) max_hum_in_60d,
+      MIN(CASE WHEN timestamp >= ${c60d} THEN humidity_in END) min_hum_in_60d,
+      ROUND(MAX(CASE WHEN timestamp >= ${c60d} THEN wind_gust END),1) max_gust_60d,
+      ROUND(MAX(CASE WHEN timestamp >= ${c60d} THEN rain_total END),1) max_rain_60d,
+      COUNT(CASE WHEN timestamp >= ${c60d} THEN 1 END) records_60d,
 
-      -- 90d (?6)
-      ROUND(AVG(CASE WHEN timestamp >= ?6 THEN temp_out END),1) avg_temp_90d,
-      ROUND(MAX(CASE WHEN timestamp >= ?6 THEN temp_out END),1) max_temp_90d,
-      ROUND(MIN(CASE WHEN timestamp >= ?6 THEN temp_out END),1) min_temp_90d,
-      ROUND(AVG(CASE WHEN timestamp >= ?6 THEN humidity_out END),0) avg_hum_90d,
-      ROUND(AVG(CASE WHEN timestamp >= ?6 THEN temp_in END),1) avg_temp_in_90d,
-      ROUND(MAX(CASE WHEN timestamp >= ?6 THEN temp_in END),1) max_temp_in_90d,
-      ROUND(MIN(CASE WHEN timestamp >= ?6 THEN temp_in END),1) min_temp_in_90d,
-      ROUND(AVG(CASE WHEN timestamp >= ?6 THEN humidity_in END),0) avg_hum_in_90d,
-      MAX(CASE WHEN timestamp >= ?6 THEN humidity_in END) max_hum_in_90d,
-      MIN(CASE WHEN timestamp >= ?6 THEN humidity_in END) min_hum_in_90d,
-      ROUND(MAX(CASE WHEN timestamp >= ?6 THEN wind_gust END),1) max_gust_90d,
-      ROUND(MAX(CASE WHEN timestamp >= ?6 THEN rain_total END),1) max_rain_90d,
-      COUNT(CASE WHEN timestamp >= ?6 THEN 1 END) records_90d,
+      -- 90d
+      ROUND(AVG(CASE WHEN timestamp >= ${c90d} THEN temp_out END),1) avg_temp_90d,
+      ROUND(MAX(CASE WHEN timestamp >= ${c90d} THEN temp_out END),1) max_temp_90d,
+      ROUND(MIN(CASE WHEN timestamp >= ${c90d} THEN temp_out END),1) min_temp_90d,
+      ROUND(AVG(CASE WHEN timestamp >= ${c90d} THEN humidity_out END),0) avg_hum_90d,
+      ROUND(AVG(CASE WHEN timestamp >= ${c90d} THEN temp_in END),1) avg_temp_in_90d,
+      ROUND(MAX(CASE WHEN timestamp >= ${c90d} THEN temp_in END),1) max_temp_in_90d,
+      ROUND(MIN(CASE WHEN timestamp >= ${c90d} THEN temp_in END),1) min_temp_in_90d,
+      ROUND(AVG(CASE WHEN timestamp >= ${c90d} THEN humidity_in END),0) avg_hum_in_90d,
+      MAX(CASE WHEN timestamp >= ${c90d} THEN humidity_in END) max_hum_in_90d,
+      MIN(CASE WHEN timestamp >= ${c90d} THEN humidity_in END) min_hum_in_90d,
+      ROUND(MAX(CASE WHEN timestamp >= ${c90d} THEN wind_gust END),1) max_gust_90d,
+      ROUND(MAX(CASE WHEN timestamp >= ${c90d} THEN rain_total END),1) max_rain_90d,
+      COUNT(CASE WHEN timestamp >= ${c90d} THEN 1 END) records_90d
+    FROM measurements
+    WHERE timestamp >= ${c90d}
+  `).first();
 
-      -- 180d (?7)
-      ROUND(AVG(CASE WHEN timestamp >= ?7 THEN temp_out END),1) avg_temp_180d,
-      ROUND(MAX(CASE WHEN timestamp >= ?7 THEN temp_out END),1) max_temp_180d,
-      ROUND(MIN(CASE WHEN timestamp >= ?7 THEN temp_out END),1) min_temp_180d,
-      ROUND(AVG(CASE WHEN timestamp >= ?7 THEN humidity_out END),0) avg_hum_180d,
-      ROUND(AVG(CASE WHEN timestamp >= ?7 THEN temp_in END),1) avg_temp_in_180d,
-      ROUND(MAX(CASE WHEN timestamp >= ?7 THEN temp_in END),1) max_temp_in_180d,
-      ROUND(MIN(CASE WHEN timestamp >= ?7 THEN temp_in END),1) min_temp_in_180d,
-      ROUND(AVG(CASE WHEN timestamp >= ?7 THEN humidity_in END),0) avg_hum_in_180d,
-      MAX(CASE WHEN timestamp >= ?7 THEN humidity_in END) max_hum_in_180d,
-      MIN(CASE WHEN timestamp >= ?7 THEN humidity_in END) min_hum_in_180d,
-      ROUND(MAX(CASE WHEN timestamp >= ?7 THEN wind_gust END),1) max_gust_180d,
-      ROUND(MAX(CASE WHEN timestamp >= ?7 THEN rain_total END),1) max_rain_180d,
-      COUNT(CASE WHEN timestamp >= ?7 THEN 1 END) records_180d,
+  const statsPromise3 = db.prepare(`
+    SELECT
+      -- 180d
+      ROUND(AVG(CASE WHEN timestamp >= ${c180d} THEN temp_out END),1) avg_temp_180d,
+      ROUND(MAX(CASE WHEN timestamp >= ${c180d} THEN temp_out END),1) max_temp_180d,
+      ROUND(MIN(CASE WHEN timestamp >= ${c180d} THEN temp_out END),1) min_temp_180d,
+      ROUND(AVG(CASE WHEN timestamp >= ${c180d} THEN humidity_out END),0) avg_hum_180d,
+      ROUND(AVG(CASE WHEN timestamp >= ${c180d} THEN temp_in END),1) avg_temp_in_180d,
+      ROUND(MAX(CASE WHEN timestamp >= ${c180d} THEN temp_in END),1) max_temp_in_180d,
+      ROUND(MIN(CASE WHEN timestamp >= ${c180d} THEN temp_in END),1) min_temp_in_180d,
+      ROUND(AVG(CASE WHEN timestamp >= ${c180d} THEN humidity_in END),0) avg_hum_180d,
+      MAX(CASE WHEN timestamp >= ${c180d} THEN humidity_in END) max_hum_180d,
+      MIN(CASE WHEN timestamp >= ${c180d} THEN humidity_in END) min_hum_in_180d,
+      ROUND(MAX(CASE WHEN timestamp >= ${c180d} THEN wind_gust END),1) max_gust_180d,
+      ROUND(MAX(CASE WHEN timestamp >= ${c180d} THEN rain_total END),1) max_rain_180d,
+      COUNT(CASE WHEN timestamp >= ${c180d} THEN 1 END) records_180d,
 
-      -- 365d (?8)
-      ROUND(AVG(CASE WHEN timestamp >= ?8 THEN temp_out END),1) avg_temp_365d,
-      ROUND(MAX(CASE WHEN timestamp >= ?8 THEN temp_out END),1) max_temp_365d,
-      ROUND(MIN(CASE WHEN timestamp >= ?8 THEN temp_out END),1) min_temp_365d,
-      ROUND(AVG(CASE WHEN timestamp >= ?8 THEN humidity_out END),0) avg_hum_365d,
-      ROUND(AVG(CASE WHEN timestamp >= ?8 THEN temp_in END),1) avg_temp_in_365d,
-      ROUND(MAX(CASE WHEN timestamp >= ?8 THEN temp_in END),1) max_temp_in_365d,
-      ROUND(MIN(CASE WHEN timestamp >= ?8 THEN temp_in END),1) min_temp_in_365d,
-      ROUND(AVG(CASE WHEN timestamp >= ?8 THEN humidity_in END),0) avg_hum_in_365d,
-      MAX(CASE WHEN timestamp >= ?8 THEN humidity_in END) max_hum_in_365d,
-      MIN(CASE WHEN timestamp >= ?8 THEN humidity_in END) min_hum_in_365d,
-      ROUND(MAX(CASE WHEN timestamp >= ?8 THEN wind_gust END),1) max_gust_365d,
-      ROUND(MAX(CASE WHEN timestamp >= ?8 THEN rain_total END),1) max_rain_365d,
-      COUNT(CASE WHEN timestamp >= ?8 THEN 1 END) records_365d,
+      -- 365d
+      ROUND(AVG(CASE WHEN timestamp >= ${c365d} THEN temp_out END),1) avg_temp_365d,
+      ROUND(MAX(CASE WHEN timestamp >= ${c365d} THEN temp_out END),1) max_temp_365d,
+      ROUND(MIN(CASE WHEN timestamp >= ${c365d} THEN temp_out END),1) min_temp_365d,
+      ROUND(AVG(CASE WHEN timestamp >= ${c365d} THEN humidity_out END),0) avg_hum_365d,
+      ROUND(AVG(CASE WHEN timestamp >= ${c365d} THEN temp_in END),1) avg_temp_in_365d,
+      ROUND(MAX(CASE WHEN timestamp >= ${c365d} THEN temp_in END),1) max_temp_in_365d,
+      ROUND(MIN(CASE WHEN timestamp >= ${c365d} THEN temp_in END),1) min_temp_in_365d,
+      ROUND(AVG(CASE WHEN timestamp >= ${c365d} THEN humidity_in END),0) avg_hum_in_365d,
+      MAX(CASE WHEN timestamp >= ${c365d} THEN humidity_in END) max_hum_in_365d,
+      MIN(CASE WHEN timestamp >= ${c365d} THEN humidity_in END) min_hum_in_365d,
+      ROUND(MAX(CASE WHEN timestamp >= ${c365d} THEN wind_gust END),1) max_gust_365d,
+      ROUND(MAX(CASE WHEN timestamp >= ${c365d} THEN rain_total END),1) max_rain_365d,
+      COUNT(CASE WHEN timestamp >= ${c365d} THEN 1 END) records_365d,
 
       -- all (celá historie)
       ROUND(AVG(temp_out),1) avg_temp_all,
@@ -615,7 +624,7 @@ async function getStatsData(db) {
       ROUND(MAX(rain_total),1) max_rain_all,
       COUNT(*) records_all
     FROM measurements
-  `).bind(c1h, c24h, c7d, c30d, c60d, c90d, c180d, c365d).first();
+  `).first();
 
   // 2. Denní přehled pro deštivé / suché dny v paměti (nahrazuje 9 samostatných SQL dotazů)
   const daysPromise = db.prepare(`
@@ -628,7 +637,10 @@ async function getStatsData(db) {
     ORDER BY day ASC
   `).all();
 
-  const [row, daysRes] = await Promise.all([statsPromise, daysPromise]);
+  const [row1, row2, row3, daysRes] = await Promise.all([
+    statsPromise1, statsPromise2, statsPromise3, daysPromise
+  ]);
+  const row = { ...row1, ...row2, ...row3 };
   const days = daysRes?.results ?? [];
 
   // Výpočet dešťových dnů pro daný časový limit v paměti (0 D1 row reads)
@@ -720,7 +732,16 @@ async function handleFetch(request, env, ctx) {
 
     if (path === '/api/history') {
       const cacheKey = new Request(url.toString(), { method: 'GET' });
-      return await handleCachedEndpoint(cache, cacheKey, CACHE_HISTORY_TTL, corsHdrs, ctx, () => fetchHistoryData(env.DB, url));
+      // Dynamické nastavení TTL podle délky zobrazeného okna (aby Cloudflare nevyhazoval dlouhodobé grafy z paměti po 5 minutách)
+      const from = parseTimestamp(url.searchParams.get('from')) ?? 0;
+      const to = parseTimestamp(url.searchParams.get('to')) ?? 0;
+      const diff = to - from;
+      
+      let ttl = CACHE_HISTORY_TTL;
+      if (diff >= 50 * 86400) ttl = 86400; // >= 60d -> 1 den
+      else if (diff >= 6 * 86400) ttl = 3600; // >= 7d -> 1 hodina
+
+      return await handleCachedEndpoint(cache, cacheKey, ttl, corsHdrs, ctx, () => fetchHistoryData(env.DB, url));
     }
 
     if (path === '/api/daily') {
@@ -737,9 +758,9 @@ async function handleFetch(request, env, ctx) {
     if (err.status === 400 || err.status === 404) {
       return errorResponse(err.message, err.status, corsHdrs);
     }
-    // Interní chyba — logujeme detaily, uživateli pošleme jen obecnou zprávu
+    // Interní chyba — logujeme detaily
     console.error('[FETCH] Interní chyba:', err.message);
-    return errorResponse('Interní chyba serveru', 500, corsHdrs);
+    return errorResponse(`Chyba: ${err.message}`, 500, corsHdrs);
   }
 }
 
