@@ -83,14 +83,12 @@
     <section class="page active" id="page-aktualne" role="tabpanel" aria-labelledby="nav-aktualne">
       <div class="section-heading">
         <div><p class="eyebrow">Přehled stanice</p><h2>Aktuálně</h2></div>
-        <span class="status-chip" id="dataStatus" role="status"><span class="status-dot" aria-hidden="true"></span><span id="statusText">Data nejsou připojena</span></span>
       </div>
       <div class="data-strip glass">
         <div class="timestamps">
           <div class="timestamp"><svg class="icon" aria-hidden="true"><use href="#i-clock"/></svg><dl><dt id="measuredLabel">Poslední měření</dt><dd><time id="measuredTime">Zatím není dostupné</time><span class="relative" id="measuredRelative">Čas měření neznáme</span></dd></dl></div>
           <div class="timestamp"><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg><dl><dt id="loadedLabel">Poslední načtení dat</dt><dd><time id="loadedTime">Data dosud nebyla načtena</time><span class="relative" id="loadedRelative">Časové pásmo Europe/Prague</span></dd></dl></div>
         </div>
-        <p class="source-note"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg><span id="dataMessage">Stanice zatím není připojena. Zobrazí se zde skutečně naměřené hodnoty, jakmile budou k dispozici.</span></p>
       </div>
       <div class="weather-grid" id="weatherGrid" aria-label="Aktuální meteorologické hodnoty" aria-busy="false">
         <!-- Osm komponent se stálou strukturou. Data doplňuje pouze CurrentWeatherView. -->
@@ -137,20 +135,17 @@
       </div>
       <footer class="site-footer">
         <div><p class="footer-brand">Weather Station Petr Klouček</p></div>
-        <p class="notice">Soukromá meteorologická stanice poskytuje orientační údaje, jejichž přesnost a dostupnost závisí na senzorech a přenosu dat. Web nenahrazuje oficiální meteorologické služby ani výstrahy. Údaje nejsou určeny pro bezpečnostně kritická či komerční rozhodnutí.</p>
       </footer>
     </section>
         <section class="page" id="page-grafy" role="tabpanel" aria-labelledby="nav-grafy">
       <div class="section-heading">
         <div><p class="eyebrow">Historie měření</p><h2>Grafy</h2></div>
-        <span class="status-chip" id="historyStatus" role="status"><span class="status-dot" aria-hidden="true"></span><span id="historyStatusText">Historie není připojena</span></span>
       </div>
       <div class="graphs-controls glass">
         <div class="graphs-controls-top"><div id="graphsPeriodMount" class="graphs-period-mount"></div></div>
         <p class="graphs-period-caption" id="activeTimeIndicator">Vybráno: 24 hodin</p>
         <p class="graphs-range" id="historyRange">Historie zatím není dostupná.</p>
       </div>
-      <div class="history-source"><div class="history-source-info"><p class="history-message" id="historyMessage">Historická měření zatím nejsou připojena. Pomlčka znamená chybějící hodnotu, nikoli nulu.</p><p class="history-updated" id="historyUpdated">Žádná historie dosud nebyla načtena.</p></div></div>
       <div class="history-grid" id="historyGrid" aria-label="Grafy meteorologických veličin" aria-busy="false"><article class="history-card glass hero-chart chart-accent-orange" id="history-outside" aria-labelledby="history-title-outside">
         <div class="chart-heading"><div><div class="card-title"><span class="card-icon" aria-hidden="true"><svg class="icon"><use href="#i-outdoor"/></svg></span><h3 id="history-title-outside">Venkovní teplota</h3></div><p class="chart-subtitle">Vývoj v čase · °C</p></div><div class="chart-last"><p>Poslední v období</p><div class="chart-last-value"><span class="chart-last-number">—</span><small>°C</small></div></div></div>
         <div class="chart-legend" role="group" aria-label="Legenda: Venkovní teplota"></div>
@@ -193,15 +188,13 @@
         <div class="plot-frame"><svg class="plot-svg" tabindex="0" role="img" aria-label="Intenzita srážek, mm/h. Historie není připojena."></svg><div class="plot-empty"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg><strong>Historie zatím není připojena</strong><p>Po připojení se zde zobrazí vývoj měření.</p></div><div class="plot-tooltip" role="tooltip" hidden></div><p class="plot-readout sr-only" aria-live="polite" aria-atomic="true"></p></div>
         <div class="chart-stats"><div class="chart-extrema"><span>Min<strong class="chart-min">—</strong></span><span>Max<strong class="chart-max">—</strong></span></div><span class="chart-resolution">Bez hodnot</span></div><p class="chart-state"></p>
       </article></div>
-            <footer class="site-footer">
+      <footer class="site-footer">
         <div><p class="footer-brand">Weather Station Petr Klouček</p></div>
-        <p class="notice">Soukromá meteorologická stanice poskytuje orientační údaje, jejichž přesnost a dostupnost závisí na senzorech a přenosu dat. Web nenahrazuje oficiální meteorologické služby ani výstrahy. Údaje nejsou určeny pro bezpečnostně kritická či komerční rozhodnutí.</p>
       </footer>
     </section>
 
         <section class="page" id="page-statistiky" role="tabpanel" aria-labelledby="nav-statistiky">
-      <div class="section-heading"><div><p class="eyebrow">Souhrny měření</p><h2>Statistiky</h2></div><span class="status-chip" id="statisticsStatus" role="status"><span class="status-dot" aria-hidden="true"></span><span id="statisticsStatusText">Statistiky nejsou připojené</span></span></div>
-      <div class="statistics-source glass"><div class="statistics-source-top"><div><p class="statistics-source-text" id="statisticsMessage">Historie zatím není připojena. Neznámá hodnota ani neznámý počet záznamů se nezobrazují jako nula.</p><p class="statistics-asof" id="statisticsAsOf">Žádné podklady dosud nebyly načteny.</p></div></div></div>
+      <div class="section-heading"><div><p class="eyebrow">Souhrny měření</p><h2>Statistiky</h2></div></div>
       <div class="statistics-period-nav" id="statisticsPeriodMount" aria-label="Přejít na statistiku období"></div>
       <div class="statistics-grid" id="statisticsGrid" aria-label="Statistiky devíti časových období" aria-busy="false"><article class="statistics-card glass" id="statistics-1h" aria-labelledby="statistics-title-1h">
       <header class="statistics-card-head"><p class="statistics-card-kicker"><span class="statistics-card-kind">Čeká na data</span><span class="statistics-card-index">01 / 09</span></p><h3 id="statistics-title-1h">Poslední hodina</h3><p class="statistics-card-range">—</p></header>
@@ -259,13 +252,11 @@
     </article></div>
             <footer class="site-footer">
         <div><p class="footer-brand">Weather Station Petr Klouček</p></div>
-        <p class="notice">Soukromá meteorologická stanice poskytuje orientační údaje, jejichž přesnost a dostupnost závisí na senzorech a přenosu dat. Web nenahrazuje oficiální meteorologické služby ani výstrahy. Údaje nejsou určeny pro bezpečnostně kritická či komerční rozhodnutí.</p>
       </footer>
     </section>
 
         <section class="page" id="page-rekordy" role="tabpanel" aria-labelledby="nav-rekordy">
-      <div class="section-heading"><div><p class="eyebrow">Paměť stanice</p><h2>Rekordy</h2></div><span class="status-chip" id="recordsStatus" role="status"><span class="status-dot" aria-hidden="true"></span><span id="recordsStatusText">Historie není připojena</span></span></div>
-      <div class="records-source glass"><div class="records-source-top"><div><p id="recordsMessage">Historické rekordy zatím nejsou připojené. Pomlčka znamená nedostupný údaj, nikoli nulové měření.</p><p class="records-asof" id="recordsAsOf">Žádná historie dosud nebyla načtena.</p></div></div></div>
+      <div class="section-heading"><div><p class="eyebrow">Paměť stanice</p><h2>Rekordy</h2></div></div>
       <div id="recordsContent" aria-busy="false"><section class="records-group" aria-labelledby="records-group-teplota"><header class="records-group-heading"><h3 id="records-group-teplota">Teplota a vlhkost</h3></header><div class="records-grid" id="records-grid-teplota"><article class="record-card glass record-accent-orange" id="record-outsideMax" aria-labelledby="record-title-outsideMax">
               <div class="record-card-top"><span class="record-kind">Maximum</span><span class="record-icon card-icon" aria-hidden="true"><svg class="icon"><use href="#i-outdoor"/></svg></span></div>
               <h4 id="record-title-outsideMax">Nejvyšší venkovní teplota</h4>
@@ -362,7 +353,6 @@
       <div class="records-grid history-widget-grid"><article class="record-card glass history-widget" aria-label="Dostupná historie měření"><dl><div><dt>Počet záznamů</dt><dd class="record-value is-missing" id="recordsTotal" aria-live="polite">—</dd></div><div><dt>Záznamy od</dt><dd class="history-widget-date is-missing" id="recordsAvailableFrom" aria-live="polite">—</dd></div></dl></article></div>
       <footer class="site-footer">
         <div><p class="footer-brand">Weather Station Petr Klouček</p></div>
-        <p class="notice">Soukromá meteorologická stanice poskytuje orientační údaje, jejichž přesnost a dostupnost závisí na senzorech a přenosu dat. Web nenahrazuje oficiální meteorologické služby ani výstrahy. Údaje nejsou určeny pro bezpečnostně kritická či komerční rozhodnutí.</p>
       </footer>
     </section>
 

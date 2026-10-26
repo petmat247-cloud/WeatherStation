@@ -252,3 +252,17 @@ Chat 12 — Čistění UI, odstranění vodorovného posunu a plynulé procháze
   - V `docs/script.js` implementován nepřetržitý scrubbing s odchytáváním `touchstart`, `touchmove`, `pointerdown`, `pointermove`.
   - Při vodorovném tažení se zamezuje trhání stránky, bublina s hodnotami se plynule posouvá v reálném čase (60 fps) a dynamicky aktualizuje i číslo v záhlaví karty.
   - Přidáno inteligentní překlápění bubliny doleva v blízkosti pravého okraje, aby nepřetékala ani nezakrývala prst.
+
+Chat 13 — Trvalá optimalizace rekordů s časovými razítky, oprava vlhkostí a promazání HTML (26. října 2026):
+- **Předpočítaná tabulka rekordů `all_time_records` (D1 safe)**:
+  - Vytvořena tabulka `all_time_records` pro 16 absolutních rekordů stanice.
+  - Endpoint `/api/records` čte pouze těchto 16 předpočítaných řádků (místo desítek tisíc řádků) a vrací přesné časové razítko `timestamp` pro každý rekord.
+  - V `handleCron` a `handleWeathercloudCron` se při každém novém měření bleskově zkontroluje a zaktualizuje případný nový rekord (např. v zimě nová minimální teplota) pomocí podmíněného `UPDATE ... WHERE ? < value`.
+  - V `docs/api.js` napojeny timestampy do karet rekordů, kde se nyní pod hodnotou zobrazuje přesné datum a čas.
+- **Oprava vlhkosti ve statistikách**:
+  - Do všech 9 časových oken v `worker/src/index.js` doplněn výpočet `MAX(humidity_out)` a `MIN(humidity_out)`.
+  - Opraven překlep v aliasu sloupce u 180denního okna (`avg_hum_in_180d`), který způsoboval `null` hodnoty u vnitřní vlhkosti.
+  - V `docs/api.js` namapována venkovní i vnitřní maxima a minima vlhkosti.
+- **Fyzické promazání zbytečných textů z HTML**:
+  - Z `docs/index.html` fyzicky odstraněny nepoužívané bloky `.status-chip`, `.source-note`, `.history-source`, `.statistics-source`, `.records-source` i dlouhé patičky `.notice`.
+  - V `docs/script.js` ošetřeny všechny přístupy přes `document.getElementById` s kontrolou existence prvku pro 100% stabilitu bez chyb.

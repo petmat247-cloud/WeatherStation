@@ -206,8 +206,8 @@
             },
             outsideHumidity: {
               mean: d.avg_hum ?? null,
-              max: null,
-              min: null,
+              max: d.max_hum ?? null,
+              min: d.min_hum ?? null,
               n: recCount
             },
             insideHumidity: {
@@ -254,24 +254,27 @@
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const r = await res.json();
 
+      const formatAt = (ts) => ts ? new Date(ts * 1000).toISOString() : null;
+      const rec = r.records || {};
+
       const extremes = {
-        outsideMax:     { value: r.temp_max, unit: '°C' },
-        outsideMin:     { value: r.temp_min, unit: '°C' },
-        feelsMax:       { value: r.feels_like_max, unit: '°C' },
-        feelsMin:       { value: r.feels_like_min, unit: '°C' },
-        dewMax:         { value: r.dew_point_max, unit: '°C' },
-        dewMin:         { value: r.dew_point_min, unit: '°C' },
-        insideMax:      { value: r.temp_in_max, unit: '°C' },
-        insideMin:      { value: r.temp_in_min, unit: '°C' },
-        humidityOutMax: { value: r.humidity_max, unit: '%' },
-        humidityOutMin: { value: r.humidity_min, unit: '%' },
-        humidityInMax:  { value: r.humidity_in_max, unit: '%' },
-        humidityInMin:  { value: r.humidity_in_min, unit: '%' },
-        gustMax:        { value: r.wind_gust_max, unit: 'm/s' },
-        windMax:        { value: r.wind_speed_max, unit: 'm/s' },
-        rainRateMax:    { value: r.rain_rate_max, unit: 'mm/h' },
-        rainHourMax:    { value: r.rain_rate_max, unit: 'mm' },
-        rainDayMax:     { value: r.rain_total_max, unit: 'mm' },
+        outsideMax:     { value: rec.outsideMax?.value ?? r.temp_max, unit: '°C', at: formatAt(rec.outsideMax?.timestamp ?? r.temp_max_time) },
+        outsideMin:     { value: rec.outsideMin?.value ?? r.temp_min, unit: '°C', at: formatAt(rec.outsideMin?.timestamp ?? r.temp_min_time) },
+        feelsMax:       { value: rec.feelsMax?.value ?? r.feels_like_max, unit: '°C', at: formatAt(rec.feelsMax?.timestamp ?? r.feels_like_max_time) },
+        feelsMin:       { value: rec.feelsMin?.value ?? r.feels_like_min, unit: '°C', at: formatAt(rec.feelsMin?.timestamp ?? r.feels_like_min_time) },
+        dewMax:         { value: rec.dewMax?.value ?? r.dew_point_max, unit: '°C', at: formatAt(rec.dewMax?.timestamp ?? r.dew_point_max_time) },
+        dewMin:         { value: rec.dewMin?.value ?? r.dew_point_min, unit: '°C', at: formatAt(rec.dewMin?.timestamp ?? r.dew_point_min_time) },
+        insideMax:      { value: rec.insideMax?.value ?? r.temp_in_max, unit: '°C', at: formatAt(rec.insideMax?.timestamp ?? r.temp_in_max_time) },
+        insideMin:      { value: rec.insideMin?.value ?? r.temp_in_min, unit: '°C', at: formatAt(rec.insideMin?.timestamp ?? r.temp_in_min_time) },
+        humidityOutMax: { value: rec.humidityOutMax?.value ?? r.humidity_max, unit: '%', at: formatAt(rec.humidityOutMax?.timestamp ?? r.humidity_max_time) },
+        humidityOutMin: { value: rec.humidityOutMin?.value ?? r.humidity_min, unit: '%', at: formatAt(rec.humidityOutMin?.timestamp ?? r.humidity_min_time) },
+        humidityInMax:  { value: rec.humidityInMax?.value ?? r.humidity_in_max, unit: '%', at: formatAt(rec.humidityInMax?.timestamp ?? r.humidity_in_max_time) },
+        humidityInMin:  { value: rec.humidityInMin?.value ?? r.humidity_in_min, unit: '%', at: formatAt(rec.humidityInMin?.timestamp ?? r.humidity_in_min_time) },
+        gustMax:        { value: rec.gustMax?.value ?? r.wind_gust_max, unit: 'm/s', at: formatAt(rec.gustMax?.timestamp ?? r.wind_gust_max_time) },
+        windMax:        { value: rec.windMax?.value ?? r.wind_speed_max, unit: 'm/s', at: formatAt(rec.windMax?.timestamp ?? r.wind_speed_max_time) },
+        rainRateMax:    { value: rec.rainRateMax?.value ?? r.rain_rate_max, unit: 'mm/h', at: formatAt(rec.rainRateMax?.timestamp ?? r.rain_rate_max_time) },
+        rainHourMax:    { value: rec.rainRateMax?.value ?? r.rain_rate_max, unit: 'mm', at: formatAt(rec.rainRateMax?.timestamp ?? r.rain_rate_max_time) },
+        rainDayMax:     { value: rec.rainDayMax?.value ?? r.rain_total_max, unit: 'mm', at: formatAt(rec.rainDayMax?.timestamp ?? r.rain_total_max_time) },
         dryLongest:     { value: r.max_dry_streak, unit: 'dní' }
       };
 

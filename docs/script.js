@@ -1582,7 +1582,7 @@
         this.relativeTimer = setInterval(() => { if (!document.hidden) this.render(); },30000);
         document.addEventListener('visibilitychange',() => { if (!document.hidden) this.render(); });
       }
-      text(id,value) { document.getElementById(id).textContent = value; }
+      text(id,value) { const el = document.getElementById(id); if (el) el.textContent = value; }
       relative(ms,now = Date.now()) {
         if (ms === null) return '';
         const seconds = Math.max(0,Math.floor((now-ms)/1000));
@@ -1629,7 +1629,7 @@
           else if (stale) { statusText = 'Zastaralé údaje'; tone = 'warning'; detail = 'Poslední měření je starší než nastavený limit. Hodnoty nemusejí odpovídat současnému počasí.'; }
           else { statusText = missing ? 'Některé údaje chybí' : 'Měření je aktuální'; tone = missing ? 'neutral' : 'success'; detail = missing ? 'Dostupné hodnoty jsou zobrazené. Pomlčka znamená chybějící nebo neověřený údaj, nikoli nulu.' : 'Čas měření pochází ze stanice. Čas načtení zaznamenává samostatně přijetí údajů do tohoto webu.'; }
         }
-        this.text('statusText',statusText); document.getElementById('dataStatus').dataset.tone = tone;
+        this.text('statusText',statusText); const ds = document.getElementById('dataStatus'); if (ds) ds.dataset.tone = tone;
         this.text('dataMessage',detail);
         this.text('measuredLabel','Poslední měření');
         this.text('loadedLabel','Poslední načtení dat');
@@ -2111,9 +2111,10 @@
             message=incomplete?'Některé řady chybí nebo obsahují mezery. Úseky bez měření se nepropojují a chybějící hodnoty se nepovažují za nulu.':'Všechny grafy sdílejí stejné období. Hodnoty, minima a maxima vycházejí z původních vzorků v daném rozsahu.';
           }
         }
-        document.getElementById('historyStatusText').textContent=title;document.getElementById('historyStatus').dataset.tone=tone;
-        document.getElementById('historyMessage').textContent=message;
-        document.getElementById('historyUpdated').textContent=state.receivedAt===null?'Žádná historie dosud nebyla načtena.':`Poslední načtení historie: ${this.fullTime(state.receivedAt)}${data?.latestValueAt!=null?` · Nejnovější měření: ${this.fullTime(data.latestValueAt)}`:''}`;
+        const hst = document.getElementById('historyStatusText'); if (hst) hst.textContent=title;
+        const hs = document.getElementById('historyStatus'); if (hs) hs.dataset.tone=tone;
+        const hm = document.getElementById('historyMessage'); if (hm) hm.textContent=message;
+        const hu = document.getElementById('historyUpdated'); if (hu) hu.textContent=state.receivedAt===null?'Žádná historie dosud nebyla načtena.':`Poslední načtení historie: ${this.fullTime(state.receivedAt)}${data?.latestValueAt!=null?` · Nejnovější měření: ${this.fullTime(data.latestValueAt)}`:''}`;
         document.getElementById('historyGrid').setAttribute('aria-busy',String(state.status==='loading'));
         for(const chart of this.charts)chart.setData(range);
         const signature=`${range.code}:${range.from}:${range.to}`;
@@ -2299,8 +2300,10 @@
           else if(this.summaries?.some(s=>s.availableCount>0&&(STATISTICS_METRICS.some(field=>s.metrics[field.key].n===0)||s.gust.n===0||(s.rain.kind!=='intensity'&&s.rain.value===null)))){title='Některé veličiny chybí';detail='Dostupné statistiky jsou vypočtené z platných měření. Chybějící veličiny nejsou nahrazené nulami.';}
           else{title='Souhrny jsou k dispozici';detail='Každé období se vyhodnocuje samostatně. Průměry používají jen platná měření; počet záznamů zahrnuje i existující neúplné záznamy.';}
         }
-        document.getElementById('statisticsStatusText').textContent=title;document.getElementById('statisticsStatus').dataset.tone=tone;document.getElementById('statisticsMessage').textContent=detail;
-        document.getElementById('statisticsAsOf').textContent=data?`Souhrny k ${this.fullDate.format(data.asOf)} · načtení podkladů: ${this.fullDate.format(receivedAt)} · Europe/Prague`:'Žádné podklady dosud nebyly načteny.';
+        const sst = document.getElementById('statisticsStatusText'); if (sst) sst.textContent=title;
+        const ss = document.getElementById('statisticsStatus'); if (ss) ss.dataset.tone=tone;
+        const sm = document.getElementById('statisticsMessage'); if (sm) sm.textContent=detail;
+        const sa = document.getElementById('statisticsAsOf'); if (sa) sa.textContent=data?`Souhrny k ${this.fullDate.format(data.asOf)} · načtení podkladů: ${this.fullDate.format(receivedAt)} · Europe/Prague`:'Žádné podklady dosud nebyly načteny.';
         document.getElementById('statisticsGrid').setAttribute('aria-busy',String(status==='loading'));
       }
       render(){
@@ -2490,7 +2493,7 @@
       }
       isActive(){return document.body.dataset.section==='rekordy';}
       schedule(){if(!this.isActive()||this.pending!==null)return;this.pending=requestAnimationFrame(()=>{this.pending=null;if(this.isActive())this.render();});}
-      text(id,value){document.getElementById(id).textContent=value;}
+      text(id,value){const el=document.getElementById(id);if(el)el.textContent=value;}
       time(t,label){const node=document.createElement('time');node.dateTime=new Date(t).toISOString();node.textContent=`${label||''}${this.fullDate.format(t)}`;return node;}
       render(){
         const {data,status,receivedAt}=this.store.state,stale=this.store.isStale(),empty=data?.totalRecords===0&&data.available===0;
@@ -2504,7 +2507,8 @@
           else if(data.available<18||data.totalRecords===null){title='Část údajů není dostupná';message='Zobrazujeme ověřené dostupné extrémy. Některé veličiny, jejich metodika nebo přesný celkový počet chybí.';}
           else {title='Rekordy jsou k dispozici';message='Extrémy z celé dostupné historie ve sledovaném rozsahu. Při shodě se uvádí nejstarší výskyt; hodnoty z různých veličin se nezaměňují.';}
         }
-        this.text('recordsStatusText',title);document.getElementById('recordsStatus').dataset.tone=tone;
+        this.text('recordsStatusText',title);
+        const rs = document.getElementById('recordsStatus'); if (rs) rs.dataset.tone=tone;
         this.text('recordsMessage',message);
         this.text('recordsAsOf',data?`Historický snímek k ${this.fullDate.format(data.asOf)} · přijetí podkladů: ${this.fullDate.format(receivedAt)}`:'Žádná historie dosud nebyla načtena.');
         document.getElementById('recordsContent').setAttribute('aria-busy',String(status==='loading'));

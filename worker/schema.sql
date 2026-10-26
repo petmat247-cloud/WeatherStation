@@ -33,3 +33,11 @@ CREATE TABLE IF NOT EXISTS measurements (
 -- nevyvolá full table scan — kritické pro D1 free tier (5M reads/den).
 CREATE INDEX IF NOT EXISTS idx_measurements_timestamp
     ON measurements (timestamp);
+
+-- Tabulka absolutních rekordů stanice (16 řádků).
+-- Šetří D1 limit tím, že se rekordy nepočítají ze 47k řádků při každé návštěvě.
+CREATE TABLE IF NOT EXISTS all_time_records (
+    metric      TEXT PRIMARY KEY,
+    value       REAL,
+    timestamp   INTEGER
+);

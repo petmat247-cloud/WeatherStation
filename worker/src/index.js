@@ -211,6 +211,7 @@ async function handleCron(env) {
     const result = await saveToDB(env.DB, record);
     if (result.success) {
       console.log(`[CRON] OK — timestamp: ${record.timestamp}, temp: ${record.temp_out}°C`);
+      await checkRecordExtremes(env.DB, record);
     }
   } catch (err) {
     // Logujeme interní chybu do Cloudflare logů, ale ven se nic neposílá
@@ -393,36 +394,172 @@ async function fetchDailyData(db, url) {
   return { count: rows.results.length, data: rows.results };
 }
 
-/** GET /api/records — absolutní rekordy ze všech dat (optimalizováno) */
-async function getRecordsData(db) {
-  // 1. Základní rekordy
-  const basicRecordsPromise = db.prepare(`
+/** Zajišťuje existenci a jednorázovou inicializaci tabulky all_time_records */
+async function ensureRecordsTable(db) {
+  await db.prepare(`
+    CREATE TABLE IF NOT EXISTS all_time_records (
+      metric TEXT PRIMARY KEY,
+      value REAL,
+      timestamp INTEGER
+    )
+  `).run();
+
+  const check = await db.prepare("SELECT count(*) AS cnt FROM all_time_records").first();
+  if (check && check.cnt >= 16) {
+    return; // Již inicializováno
+  }
+
+  // Jednorázová agregace pro výchozí hodnoty
+  const ex = await db.prepare(`
     SELECT
-      ROUND(MAX(temp_out), 1)         AS temp_max,
-      ROUND(MIN(temp_out), 1)         AS temp_min,
-      ROUND(MAX(feels_like), 1)       AS feels_like_max,
-      ROUND(MIN(feels_like), 1)       AS feels_like_min,
-      ROUND(MAX(dew_point), 1)        AS dew_point_max,
-      ROUND(MIN(dew_point), 1)        AS dew_point_min,
-      ROUND(MAX(temp_in), 1)          AS temp_in_max,
-      ROUND(MIN(temp_in), 1)          AS temp_in_min,
-      ROUND(MAX(pressure), 1)         AS pressure_max,
-      ROUND(MIN(pressure), 1)         AS pressure_min,
-      ROUND(MAX(wind_speed), 1)       AS wind_speed_max,
-      ROUND(MAX(wind_gust), 1)        AS wind_gust_max,
-      ROUND(MAX(rain_rate), 1)        AS rain_rate_max,
-      ROUND(MAX(rain_total), 1)       AS rain_total_max,
-      MIN(humidity_out)               AS humidity_min,
-      MAX(humidity_out)               AS humidity_max,
-      MIN(humidity_in)                AS humidity_in_min,
-      MAX(humidity_in)                AS humidity_in_max,
-      datetime(MIN(timestamp), 'unixepoch') AS oldest_record,
-      datetime(MAX(timestamp), 'unixepoch') AS newest_record,
-      COUNT(*)                        AS total_records
+      ROUND(MAX(temp_out), 1)   AS outsideMax,
+      ROUND(MIN(temp_out), 1)   AS outsideMin,
+      ROUND(MAX(feels_like), 1) AS feelsMax,
+      ROUND(MIN(feels_like), 1) AS feelsMin,
+      ROUND(MAX(dew_point), 1)  AS dewMax,
+      ROUND(MIN(dew_point), 1)  AS dewMin,
+      ROUND(MAX(temp_in), 1)    AS insideMax,
+      ROUND(MIN(temp_in), 1)    AS insideMin,
+      MAX(humidity_out)         AS humidityOutMax,
+      MIN(humidity_out)         AS humidityOutMin,
+      MAX(humidity_in)          AS humidityInMax,
+      MIN(humidity_in)          AS humidityInMin,
+      ROUND(MAX(wind_speed), 1) AS windMax,
+      ROUND(MAX(wind_gust), 1)  AS gustMax,
+      ROUND(MAX(rain_rate), 1)  AS rainRateMax,
+      ROUND(MAX(rain_total), 1) AS rainDayMax
     FROM measurements
   `).first();
 
-  // 2. Denní přehled pro výpočet sérií sucha v paměti (0 dodatečných SQL dotazů)
+  if (!ex) return;
+
+  const queries = [
+    ex.outsideMax != null ? db.prepare("SELECT timestamp FROM measurements WHERE temp_out >= ? ORDER BY timestamp ASC LIMIT 1").bind(ex.outsideMax) : null,
+    ex.outsideMin != null ? db.prepare("SELECT timestamp FROM measurements WHERE temp_out <= ? ORDER BY timestamp ASC LIMIT 1").bind(ex.outsideMin) : null,
+    ex.feelsMax != null ? db.prepare("SELECT timestamp FROM measurements WHERE feels_like >= ? ORDER BY timestamp ASC LIMIT 1").bind(ex.feelsMax) : null,
+    ex.feelsMin != null ? db.prepare("SELECT timestamp FROM measurements WHERE feels_like <= ? ORDER BY timestamp ASC LIMIT 1").bind(ex.feelsMin) : null,
+    ex.dewMax != null ? db.prepare("SELECT timestamp FROM measurements WHERE dew_point >= ? ORDER BY timestamp ASC LIMIT 1").bind(ex.dewMax) : null,
+    ex.dewMin != null ? db.prepare("SELECT timestamp FROM measurements WHERE dew_point <= ? ORDER BY timestamp ASC LIMIT 1").bind(ex.dewMin) : null,
+    ex.insideMax != null ? db.prepare("SELECT timestamp FROM measurements WHERE temp_in >= ? ORDER BY timestamp ASC LIMIT 1").bind(ex.insideMax) : null,
+    ex.insideMin != null ? db.prepare("SELECT timestamp FROM measurements WHERE temp_in <= ? ORDER BY timestamp ASC LIMIT 1").bind(ex.insideMin) : null,
+    ex.humidityOutMax != null ? db.prepare("SELECT timestamp FROM measurements WHERE humidity_out >= ? ORDER BY timestamp ASC LIMIT 1").bind(ex.humidityOutMax) : null,
+    ex.humidityOutMin != null ? db.prepare("SELECT timestamp FROM measurements WHERE humidity_out <= ? ORDER BY timestamp ASC LIMIT 1").bind(ex.humidityOutMin) : null,
+    ex.humidityInMax != null ? db.prepare("SELECT timestamp FROM measurements WHERE humidity_in >= ? ORDER BY timestamp ASC LIMIT 1").bind(ex.humidityInMax) : null,
+    ex.humidityInMin != null ? db.prepare("SELECT timestamp FROM measurements WHERE humidity_in <= ? ORDER BY timestamp ASC LIMIT 1").bind(ex.humidityInMin) : null,
+    ex.windMax != null ? db.prepare("SELECT timestamp FROM measurements WHERE wind_speed >= ? ORDER BY timestamp ASC LIMIT 1").bind(ex.windMax) : null,
+    ex.gustMax != null ? db.prepare("SELECT timestamp FROM measurements WHERE wind_gust >= ? ORDER BY timestamp ASC LIMIT 1").bind(ex.gustMax) : null,
+    ex.rainRateMax != null ? db.prepare("SELECT timestamp FROM measurements WHERE rain_rate >= ? ORDER BY timestamp ASC LIMIT 1").bind(ex.rainRateMax) : null,
+    ex.rainDayMax != null ? db.prepare("SELECT timestamp FROM measurements WHERE rain_total >= ? ORDER BY timestamp ASC LIMIT 1").bind(ex.rainDayMax) : null,
+  ];
+
+  const validQueries = queries.filter(Boolean);
+  const results = await db.batch(validQueries);
+
+  const initRows = [
+    { metric: 'outsideMax', value: ex.outsideMax, timestamp: results[0]?.results?.[0]?.timestamp ?? null },
+    { metric: 'outsideMin', value: ex.outsideMin, timestamp: results[1]?.results?.[0]?.timestamp ?? null },
+    { metric: 'feelsMax', value: ex.feelsMax, timestamp: results[2]?.results?.[0]?.timestamp ?? null },
+    { metric: 'feelsMin', value: ex.feelsMin, timestamp: results[3]?.results?.[0]?.timestamp ?? null },
+    { metric: 'dewMax', value: ex.dewMax, timestamp: results[4]?.results?.[0]?.timestamp ?? null },
+    { metric: 'dewMin', value: ex.dewMin, timestamp: results[5]?.results?.[0]?.timestamp ?? null },
+    { metric: 'insideMax', value: ex.insideMax, timestamp: results[6]?.results?.[0]?.timestamp ?? null },
+    { metric: 'insideMin', value: ex.insideMin, timestamp: results[7]?.results?.[0]?.timestamp ?? null },
+    { metric: 'humidityOutMax', value: ex.humidityOutMax, timestamp: results[8]?.results?.[0]?.timestamp ?? null },
+    { metric: 'humidityOutMin', value: ex.humidityOutMin, timestamp: results[9]?.results?.[0]?.timestamp ?? null },
+    { metric: 'humidityInMax', value: ex.humidityInMax, timestamp: results[10]?.results?.[0]?.timestamp ?? null },
+    { metric: 'humidityInMin', value: ex.humidityInMin, timestamp: results[11]?.results?.[0]?.timestamp ?? null },
+    { metric: 'windMax', value: ex.windMax, timestamp: results[12]?.results?.[0]?.timestamp ?? null },
+    { metric: 'gustMax', value: ex.gustMax, timestamp: results[13]?.results?.[0]?.timestamp ?? null },
+    { metric: 'rainRateMax', value: ex.rainRateMax, timestamp: results[14]?.results?.[0]?.timestamp ?? null },
+    { metric: 'rainDayMax', value: ex.rainDayMax, timestamp: results[15]?.results?.[0]?.timestamp ?? null },
+  ];
+
+  const inserts = initRows.map(r =>
+    db.prepare("INSERT OR REPLACE INTO all_time_records (metric, value, timestamp) VALUES (?, ?, ?)")
+      .bind(r.metric, r.value, r.timestamp)
+  );
+  await db.batch(inserts);
+}
+
+/** Bleskově zkontroluje a případně zaktualizuje rekord při příchodu nového měření */
+async function checkRecordExtremes(db, r) {
+  if (!r || !r.timestamp) return;
+  const updates = [];
+  if (r.temp_out != null) {
+    updates.push(db.prepare("UPDATE all_time_records SET value = ?, timestamp = ? WHERE metric = 'outsideMax' AND (? > value OR value IS NULL)").bind(r.temp_out, r.timestamp, r.temp_out));
+    updates.push(db.prepare("UPDATE all_time_records SET value = ?, timestamp = ? WHERE metric = 'outsideMin' AND (? < value OR value IS NULL)").bind(r.temp_out, r.timestamp, r.temp_out));
+  }
+  if (r.feels_like != null) {
+    updates.push(db.prepare("UPDATE all_time_records SET value = ?, timestamp = ? WHERE metric = 'feelsMax' AND (? > value OR value IS NULL)").bind(r.feels_like, r.timestamp, r.feels_like));
+    updates.push(db.prepare("UPDATE all_time_records SET value = ?, timestamp = ? WHERE metric = 'feelsMin' AND (? < value OR value IS NULL)").bind(r.feels_like, r.timestamp, r.feels_like));
+  }
+  if (r.dew_point != null) {
+    updates.push(db.prepare("UPDATE all_time_records SET value = ?, timestamp = ? WHERE metric = 'dewMax' AND (? > value OR value IS NULL)").bind(r.dew_point, r.timestamp, r.dew_point));
+    updates.push(db.prepare("UPDATE all_time_records SET value = ?, timestamp = ? WHERE metric = 'dewMin' AND (? < value OR value IS NULL)").bind(r.dew_point, r.timestamp, r.dew_point));
+  }
+  if (r.temp_in != null) {
+    updates.push(db.prepare("UPDATE all_time_records SET value = ?, timestamp = ? WHERE metric = 'insideMax' AND (? > value OR value IS NULL)").bind(r.temp_in, r.timestamp, r.temp_in));
+    updates.push(db.prepare("UPDATE all_time_records SET value = ?, timestamp = ? WHERE metric = 'insideMin' AND (? < value OR value IS NULL)").bind(r.temp_in, r.timestamp, r.temp_in));
+  }
+  if (r.humidity_out != null) {
+    updates.push(db.prepare("UPDATE all_time_records SET value = ?, timestamp = ? WHERE metric = 'humidityOutMax' AND (? > value OR value IS NULL)").bind(r.humidity_out, r.timestamp, r.humidity_out));
+    updates.push(db.prepare("UPDATE all_time_records SET value = ?, timestamp = ? WHERE metric = 'humidityOutMin' AND (? < value OR value IS NULL)").bind(r.humidity_out, r.timestamp, r.humidity_out));
+  }
+  if (r.humidity_in != null) {
+    updates.push(db.prepare("UPDATE all_time_records SET value = ?, timestamp = ? WHERE metric = 'humidityInMax' AND (? > value OR value IS NULL)").bind(r.humidity_in, r.timestamp, r.humidity_in));
+    updates.push(db.prepare("UPDATE all_time_records SET value = ?, timestamp = ? WHERE metric = 'humidityInMin' AND (? < value OR value IS NULL)").bind(r.humidity_in, r.timestamp, r.humidity_in));
+  }
+  if (r.wind_speed != null) {
+    updates.push(db.prepare("UPDATE all_time_records SET value = ?, timestamp = ? WHERE metric = 'windMax' AND (? > value OR value IS NULL)").bind(r.wind_speed, r.timestamp, r.wind_speed));
+  }
+  if (r.wind_gust != null) {
+    updates.push(db.prepare("UPDATE all_time_records SET value = ?, timestamp = ? WHERE metric = 'gustMax' AND (? > value OR value IS NULL)").bind(r.wind_gust, r.timestamp, r.wind_gust));
+  }
+  if (r.rain_rate != null) {
+    updates.push(db.prepare("UPDATE all_time_records SET value = ?, timestamp = ? WHERE metric = 'rainRateMax' AND (? > value OR value IS NULL)").bind(r.rain_rate, r.timestamp, r.rain_rate));
+  }
+  if (r.rain_total != null) {
+    updates.push(db.prepare("UPDATE all_time_records SET value = ?, timestamp = ? WHERE metric = 'rainDayMax' AND (? > value OR value IS NULL)").bind(r.rain_total, r.timestamp, r.rain_total));
+  }
+  if (updates.length > 0) {
+    try {
+      await db.batch(updates);
+    } catch (err) {
+      console.warn('[RECORDS-UPDATE] Chyba aktualizace rekordu:', err.message);
+    }
+  }
+}
+
+/** GET /api/records — absolutní rekordy ze všech dat (pouze 18 řádků z all_time_records) */
+async function getRecordsData(db) {
+  try {
+    await ensureRecordsTable(db);
+  } catch (err) {
+    console.warn('[RECORDS-INIT] Nelze ověřit tabulku rekordů:', err.message);
+  }
+
+  // 1. Načti 16 rekordů — spotřebuje přesně 16 řádků z D1!
+  let recordsRows = [];
+  try {
+    const res = await db.prepare("SELECT metric, value, timestamp FROM all_time_records").all();
+    recordsRows = res.results || [];
+  } catch (_) {}
+
+  const recordsMap = {};
+  for (const r of recordsRows) {
+    recordsMap[r.metric] = { value: r.value, timestamp: r.timestamp };
+  }
+
+  // 2. Metadata (počty a první/poslední datum)
+  const meta = await db.prepare(`
+    SELECT
+      datetime(MIN(timestamp), 'unixepoch') AS oldest_record,
+      datetime(MAX(timestamp), 'unixepoch') AS newest_record,
+      COUNT(*) AS total_records
+    FROM measurements
+  `).first();
+
+  // 3. Denní přehled pro výpočet sérií sucha v paměti (0 dodatečných SQL dotazů)
   const dailyRainPromise = db.prepare(`
     SELECT date(timestamp, 'unixepoch', '+1 hour') AS day,
            MAX(rain_rate) AS max_rain
@@ -431,7 +568,7 @@ async function getRecordsData(db) {
     ORDER BY day ASC
   `).all();
 
-  const [row, dailyRainRes] = await Promise.all([basicRecordsPromise, dailyRainPromise]);
+  const dailyRainRes = await dailyRainPromise;
   const days = dailyRainRes?.results ?? [];
 
   // Nejdelší série sucha (v paměti)
@@ -457,9 +594,45 @@ async function getRecordsData(db) {
   }
 
   return {
-    ...row,
+    records: recordsMap,
+    // Zpětná kompatibilita se starým webem
+    temp_max:            recordsMap.outsideMax?.value ?? null,
+    temp_max_time:       recordsMap.outsideMax?.timestamp ?? null,
+    temp_min:            recordsMap.outsideMin?.value ?? null,
+    temp_min_time:       recordsMap.outsideMin?.timestamp ?? null,
+    feels_like_max:      recordsMap.feelsMax?.value ?? null,
+    feels_like_max_time: recordsMap.feelsMax?.timestamp ?? null,
+    feels_like_min:      recordsMap.feelsMin?.value ?? null,
+    feels_like_min_time: recordsMap.feelsMin?.timestamp ?? null,
+    dew_point_max:       recordsMap.dewMax?.value ?? null,
+    dew_point_max_time:  recordsMap.dewMax?.timestamp ?? null,
+    dew_point_min:       recordsMap.dewMin?.value ?? null,
+    dew_point_min_time:  recordsMap.dewMin?.timestamp ?? null,
+    temp_in_max:         recordsMap.insideMax?.value ?? null,
+    temp_in_max_time:    recordsMap.insideMax?.timestamp ?? null,
+    temp_in_min:         recordsMap.insideMin?.value ?? null,
+    temp_in_min_time:    recordsMap.insideMin?.timestamp ?? null,
+    humidity_max:        recordsMap.humidityOutMax?.value ?? null,
+    humidity_max_time:   recordsMap.humidityOutMax?.timestamp ?? null,
+    humidity_min:        recordsMap.humidityOutMin?.value ?? null,
+    humidity_min_time:   recordsMap.humidityOutMin?.timestamp ?? null,
+    humidity_in_max:     recordsMap.humidityInMax?.value ?? null,
+    humidity_in_max_time: recordsMap.humidityInMax?.timestamp ?? null,
+    humidity_in_min:     recordsMap.humidityInMin?.value ?? null,
+    humidity_in_min_time: recordsMap.humidityInMin?.timestamp ?? null,
+    wind_speed_max:      recordsMap.windMax?.value ?? null,
+    wind_speed_max_time: recordsMap.windMax?.timestamp ?? null,
+    wind_gust_max:       recordsMap.gustMax?.value ?? null,
+    wind_gust_max_time:  recordsMap.gustMax?.timestamp ?? null,
+    rain_rate_max:       recordsMap.rainRateMax?.value ?? null,
+    rain_rate_max_time:  recordsMap.rainRateMax?.timestamp ?? null,
+    rain_total_max:      recordsMap.rainDayMax?.value ?? null,
+    rain_total_max_time: recordsMap.rainDayMax?.timestamp ?? null,
     max_dry_streak,
     dry_streak,
+    oldest_record: meta?.oldest_record,
+    newest_record: meta?.newest_record,
+    total_records: meta?.total_records,
   };
 }
 
@@ -484,6 +657,8 @@ async function getStatsData(db) {
       ROUND(MAX(CASE WHEN timestamp >= ${c1h} THEN temp_out END),1) max_temp_1h,
       ROUND(MIN(CASE WHEN timestamp >= ${c1h} THEN temp_out END),1) min_temp_1h,
       ROUND(AVG(CASE WHEN timestamp >= ${c1h} THEN humidity_out END),0) avg_hum_1h,
+      MAX(CASE WHEN timestamp >= ${c1h} THEN humidity_out END) max_hum_1h,
+      MIN(CASE WHEN timestamp >= ${c1h} THEN humidity_out END) min_hum_1h,
       ROUND(AVG(CASE WHEN timestamp >= ${c1h} THEN temp_in END),1) avg_temp_in_1h,
       ROUND(MAX(CASE WHEN timestamp >= ${c1h} THEN temp_in END),1) max_temp_in_1h,
       ROUND(MIN(CASE WHEN timestamp >= ${c1h} THEN temp_in END),1) min_temp_in_1h,
@@ -499,6 +674,8 @@ async function getStatsData(db) {
       ROUND(MAX(CASE WHEN timestamp >= ${c24h} THEN temp_out END),1) max_temp_24h,
       ROUND(MIN(CASE WHEN timestamp >= ${c24h} THEN temp_out END),1) min_temp_24h,
       ROUND(AVG(CASE WHEN timestamp >= ${c24h} THEN humidity_out END),0) avg_hum_24h,
+      MAX(CASE WHEN timestamp >= ${c24h} THEN humidity_out END) max_hum_24h,
+      MIN(CASE WHEN timestamp >= ${c24h} THEN humidity_out END) min_hum_24h,
       ROUND(AVG(CASE WHEN timestamp >= ${c24h} THEN temp_in END),1) avg_temp_in_24h,
       ROUND(MAX(CASE WHEN timestamp >= ${c24h} THEN temp_in END),1) max_temp_in_24h,
       ROUND(MIN(CASE WHEN timestamp >= ${c24h} THEN temp_in END),1) min_temp_in_24h,
@@ -514,6 +691,8 @@ async function getStatsData(db) {
       ROUND(MAX(CASE WHEN timestamp >= ${c7d} THEN temp_out END),1) max_temp_7d,
       ROUND(MIN(CASE WHEN timestamp >= ${c7d} THEN temp_out END),1) min_temp_7d,
       ROUND(AVG(CASE WHEN timestamp >= ${c7d} THEN humidity_out END),0) avg_hum_7d,
+      MAX(CASE WHEN timestamp >= ${c7d} THEN humidity_out END) max_hum_7d,
+      MIN(CASE WHEN timestamp >= ${c7d} THEN humidity_out END) min_hum_7d,
       ROUND(AVG(CASE WHEN timestamp >= ${c7d} THEN temp_in END),1) avg_temp_in_7d,
       ROUND(MAX(CASE WHEN timestamp >= ${c7d} THEN temp_in END),1) max_temp_in_7d,
       ROUND(MIN(CASE WHEN timestamp >= ${c7d} THEN temp_in END),1) min_temp_in_7d,
@@ -534,6 +713,8 @@ async function getStatsData(db) {
       ROUND(MAX(CASE WHEN timestamp >= ${c30d} THEN temp_out END),1) max_temp_30d,
       ROUND(MIN(CASE WHEN timestamp >= ${c30d} THEN temp_out END),1) min_temp_30d,
       ROUND(AVG(CASE WHEN timestamp >= ${c30d} THEN humidity_out END),0) avg_hum_30d,
+      MAX(CASE WHEN timestamp >= ${c30d} THEN humidity_out END) max_hum_30d,
+      MIN(CASE WHEN timestamp >= ${c30d} THEN humidity_out END) min_hum_30d,
       ROUND(AVG(CASE WHEN timestamp >= ${c30d} THEN temp_in END),1) avg_temp_in_30d,
       ROUND(MAX(CASE WHEN timestamp >= ${c30d} THEN temp_in END),1) max_temp_in_30d,
       ROUND(MIN(CASE WHEN timestamp >= ${c30d} THEN temp_in END),1) min_temp_in_30d,
@@ -549,6 +730,8 @@ async function getStatsData(db) {
       ROUND(MAX(CASE WHEN timestamp >= ${c60d} THEN temp_out END),1) max_temp_60d,
       ROUND(MIN(CASE WHEN timestamp >= ${c60d} THEN temp_out END),1) min_temp_60d,
       ROUND(AVG(CASE WHEN timestamp >= ${c60d} THEN humidity_out END),0) avg_hum_60d,
+      MAX(CASE WHEN timestamp >= ${c60d} THEN humidity_out END) max_hum_60d,
+      MIN(CASE WHEN timestamp >= ${c60d} THEN humidity_out END) min_hum_60d,
       ROUND(AVG(CASE WHEN timestamp >= ${c60d} THEN temp_in END),1) avg_temp_in_60d,
       ROUND(MAX(CASE WHEN timestamp >= ${c60d} THEN temp_in END),1) max_temp_in_60d,
       ROUND(MIN(CASE WHEN timestamp >= ${c60d} THEN temp_in END),1) min_temp_in_60d,
@@ -564,6 +747,8 @@ async function getStatsData(db) {
       ROUND(MAX(CASE WHEN timestamp >= ${c90d} THEN temp_out END),1) max_temp_90d,
       ROUND(MIN(CASE WHEN timestamp >= ${c90d} THEN temp_out END),1) min_temp_90d,
       ROUND(AVG(CASE WHEN timestamp >= ${c90d} THEN humidity_out END),0) avg_hum_90d,
+      MAX(CASE WHEN timestamp >= ${c90d} THEN humidity_out END) max_hum_90d,
+      MIN(CASE WHEN timestamp >= ${c90d} THEN humidity_out END) min_hum_90d,
       ROUND(AVG(CASE WHEN timestamp >= ${c90d} THEN temp_in END),1) avg_temp_in_90d,
       ROUND(MAX(CASE WHEN timestamp >= ${c90d} THEN temp_in END),1) max_temp_in_90d,
       ROUND(MIN(CASE WHEN timestamp >= ${c90d} THEN temp_in END),1) min_temp_in_90d,
@@ -584,11 +769,13 @@ async function getStatsData(db) {
       ROUND(MAX(CASE WHEN timestamp >= ${c180d} THEN temp_out END),1) max_temp_180d,
       ROUND(MIN(CASE WHEN timestamp >= ${c180d} THEN temp_out END),1) min_temp_180d,
       ROUND(AVG(CASE WHEN timestamp >= ${c180d} THEN humidity_out END),0) avg_hum_180d,
+      MAX(CASE WHEN timestamp >= ${c180d} THEN humidity_out END) max_hum_180d,
+      MIN(CASE WHEN timestamp >= ${c180d} THEN humidity_out END) min_hum_180d,
       ROUND(AVG(CASE WHEN timestamp >= ${c180d} THEN temp_in END),1) avg_temp_in_180d,
       ROUND(MAX(CASE WHEN timestamp >= ${c180d} THEN temp_in END),1) max_temp_in_180d,
       ROUND(MIN(CASE WHEN timestamp >= ${c180d} THEN temp_in END),1) min_temp_in_180d,
-      ROUND(AVG(CASE WHEN timestamp >= ${c180d} THEN humidity_in END),0) avg_hum_180d,
-      MAX(CASE WHEN timestamp >= ${c180d} THEN humidity_in END) max_hum_180d,
+      ROUND(AVG(CASE WHEN timestamp >= ${c180d} THEN humidity_in END),0) avg_hum_in_180d,
+      MAX(CASE WHEN timestamp >= ${c180d} THEN humidity_in END) max_hum_in_180d,
       MIN(CASE WHEN timestamp >= ${c180d} THEN humidity_in END) min_hum_in_180d,
       ROUND(MAX(CASE WHEN timestamp >= ${c180d} THEN wind_gust END),1) max_gust_180d,
       ROUND(MAX(CASE WHEN timestamp >= ${c180d} THEN rain_total END),1) max_rain_180d,
@@ -599,6 +786,8 @@ async function getStatsData(db) {
       ROUND(MAX(CASE WHEN timestamp >= ${c365d} THEN temp_out END),1) max_temp_365d,
       ROUND(MIN(CASE WHEN timestamp >= ${c365d} THEN temp_out END),1) min_temp_365d,
       ROUND(AVG(CASE WHEN timestamp >= ${c365d} THEN humidity_out END),0) avg_hum_365d,
+      MAX(CASE WHEN timestamp >= ${c365d} THEN humidity_out END) max_hum_365d,
+      MIN(CASE WHEN timestamp >= ${c365d} THEN humidity_out END) min_hum_365d,
       ROUND(AVG(CASE WHEN timestamp >= ${c365d} THEN temp_in END),1) avg_temp_in_365d,
       ROUND(MAX(CASE WHEN timestamp >= ${c365d} THEN temp_in END),1) max_temp_in_365d,
       ROUND(MIN(CASE WHEN timestamp >= ${c365d} THEN temp_in END),1) min_temp_in_365d,
@@ -614,6 +803,8 @@ async function getStatsData(db) {
       ROUND(MAX(temp_out),1) max_temp_all,
       ROUND(MIN(temp_out),1) min_temp_all,
       ROUND(AVG(humidity_out),0) avg_hum_all,
+      MAX(humidity_out) max_hum_all,
+      MIN(humidity_out) min_hum_all,
       ROUND(AVG(temp_in),1) avg_temp_in_all,
       ROUND(MAX(temp_in),1) max_temp_in_all,
       ROUND(MIN(temp_in),1) min_temp_in_all,
@@ -665,6 +856,8 @@ async function getStatsData(db) {
       max_temp:    row?.[`max_temp_${suf}`] ?? null,
       min_temp:    row?.[`min_temp_${suf}`] ?? null,
       avg_hum:     row?.[`avg_hum_${suf}`] ?? null,
+      max_hum:     row?.[`max_hum_${suf}`] ?? null,
+      min_hum:     row?.[`min_hum_${suf}`] ?? null,
       avg_temp_in: row?.[`avg_temp_in_${suf}`] ?? null,
       max_temp_in: row?.[`max_temp_in_${suf}`] ?? null,
       min_temp_in: row?.[`min_temp_in_${suf}`] ?? null,
@@ -865,6 +1058,7 @@ async function handleWeathercloudCron(env) {
     const { tempIn, humIn, usedId } = await fetchFromWeathercloud(env.WC_DEVICE_ID, env.WC_COOKIE);
     const result = await updateIndoorData(env.DB, tempIn, humIn);
     console.log(`[WC-CRON] OK (${usedId}) — tempIn: ${tempIn}°C, humIn: ${humIn}% | aktualizováno: ${result.meta?.changes ?? 0} řádků`);
+    await checkRecordExtremes(env.DB, { temp_in: tempIn, humidity_in: humIn, timestamp: Math.floor(Date.now() / 1000) });
   } catch (err) {
     console.error('[WC-CRON] Chyba:', err.message);
   }
