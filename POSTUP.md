@@ -266,3 +266,16 @@ Chat 13 — Trvalá optimalizace rekordů s časovými razítky, oprava vlhkost�
 - **Fyzické promazání zbytečných textů z HTML**:
   - Z `docs/index.html` fyzicky odstraněny nepoužívané bloky `.status-chip`, `.source-note`, `.history-source`, `.statistics-source`, `.records-source` i dlouhé patičky `.notice`.
   - V `docs/script.js` ošetřeny všechny přístupy přes `document.getElementById` s kontrolou existence prvku pro 100% stabilitu bez chyb.
+
+Chat 14 — Vycentrování widgetu historie, zvýrazňovací bod v grafech a mobilní hlavička (27. října 2026):
+- **Vycentrování widgetu historie měření na záložce Rekordy**:
+  - Třída `.history-widget-grid` nastavena na `display: flex; justify-content: center; align-items: center; width: 100%;`.
+  - Samotná karta `.history-widget` omezena na `max-width: 440px; margin: 0 auto; text-align: center;` s vycentrováním popisků i hodnot.
+- **Nahrazení šrafované svislé čáry v grafech barevným bodem přímo na křivce**:
+  - Odstraněna / skryta přerušovaná čára `.plot-crosshair`.
+  - V `docs/script.js` přidána dynamická vrstva `.plot-markers`, která při najetí myší nebo tažení prstem vykresluje výrazný barevný bod (`.plot-marker-dot` a poloprůhledné halo `.plot-marker-halo`) přímo na odpovídající křivce měření v barvě dané řady grafu.
+  - Při opuštění grafu se bod automaticky skryje.
+- **Mobilní hlavička a přepínač režimu**:
+  - Na telefonech (`@media (max-width: 600px)`) uspořádány prvky v `.header-right-actions` vertikálně pod sebe (`flex-direction: column; align-items: flex-end;`).
+  - Přepínač tmavého/světlého režimu (`.theme-control`) je nahoře s dostatkem prostoru vlevo od okraje, takže jsou obě ikony (sluníčko i měsíček) i stav přepínače zřetelně a celé vidět bez ořezání.
+  - Tlačítko „Původní web“ (`.switch-site-btn`) je umístěno přímo pod přepínačem režimu.

@@ -702,11 +702,11 @@
       .brand p { font-size: 9.6px; letter-spacing: 1.1px; }
       .brand-mark { width: 36px; height: 36px; border-radius: 12px; }
       .brand-mark .icon { width: 23px; height: 23px; }
-      .header-right-actions { gap: 8px; }
-      .switch-site-btn { padding: 6px 11px; font-size: 11.5px; gap: 5px; }
-      .theme-control { gap: 5px; }
-      .theme-control > .icon { width: 13px; height: 13px; }
-      .theme-control .liquid-switch { --switch-width: 58px; --switch-height: 30px; --thumb-width: 34px; }
+      .header-right-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 7px; margin-right: 4px; }
+      .switch-site-btn { order: 2; padding: 5px 11px; font-size: 11px; gap: 5px; }
+      .theme-control { order: 1; display: flex; align-items: center; gap: 6px; }
+      .theme-control > .icon { width: 14px; height: 14px; flex-shrink: 0; }
+      .theme-control .liquid-switch { --switch-width: 54px; --switch-height: 28px; --thumb-width: 30px; flex-shrink: 0; }
       #page-aktualne { padding-top: 29px; }
       .section-heading { align-items: flex-start; flex-wrap: wrap; gap: 14px; margin-bottom: 22px; }
       .page .section-heading h2 { font-size: 40.8px; letter-spacing: -1.5px; }
@@ -840,7 +840,10 @@
     .plot-tooltip-dot { width:5px; height:5px; border-radius:50%; background:var(--series-color); }
     .plot-tooltip-row strong { color:var(--ink); font-weight:600; white-space:nowrap; font-variant-numeric:tabular-nums; }
     .plot-tooltip-row small { display:block; font-size:9.6px; color:var(--faint); }
-    .plot-crosshair { stroke:var(--muted); stroke-width:1; stroke-dasharray:3 4; pointer-events:none; }
+    .plot-crosshair { display: none !important; }
+    .plot-markers { pointer-events: none; }
+    .plot-marker-halo { pointer-events: none; }
+    .plot-marker-dot { pointer-events: none; filter: drop-shadow(0 1px 3px rgba(0,0,0,0.35)); }
     .graphs-help { display:flex; align-items:flex-start; gap:8px; font-size:12px; color:var(--muted); line-height:1.8; margin:22px 3px 0; }
     .graphs-help .icon { width:14px; height:14px; margin-top:2px; }
     #historyStatus[data-tone="warning"] { color:var(--warning); }
@@ -1014,13 +1017,19 @@
       .record-kind,.record-availability { font-size:12px; }
       .record-time { font-size:13.2px; }
     }
-    .history-widget { min-height:300px; justify-content:center; }
-    .history-widget dl { display:flex; flex-direction:column; gap:26px; }
-    .history-widget dt { font-size:14.4px; line-height:1.55; color:var(--muted); margin-bottom:10px; }
-    .history-widget dd { margin:0; overflow-wrap:anywhere; }
-    .history-widget-date { font-size:24px; line-height:1.4; color:var(--ink); font-variant-numeric:tabular-nums; }
+    .history-widget-grid { display:flex !important; justify-content:center !important; align-items:center !important; width:100% !important; margin:32px 0 24px; }
+    .history-widget { width:100%; max-width:440px; min-height:auto; padding:30px 24px; text-align:center; margin:0 auto; }
+    .history-widget dl { display:flex; flex-direction:column; gap:24px; align-items:center; text-align:center; }
+    .history-widget dt { font-size:14.4px; line-height:1.55; color:var(--muted); margin-bottom:8px; text-align:center; }
+    .history-widget dd { margin:0; overflow-wrap:anywhere; text-align:center; }
+    .history-widget .record-value { font-size:42px; text-align:center; justify-content:center; }
+    .history-widget-date { font-size:20px; line-height:1.4; color:var(--ink); font-variant-numeric:tabular-nums; text-align:center; }
     .history-widget-date.is-missing { color:var(--faint); }
-    @media (max-width:600px) { .history-widget { min-height:310px; } }
+    @media (max-width:600px) {
+      .history-widget { min-height:auto; padding:24px 20px; }
+      .history-widget .record-value { font-size:38px; }
+      .history-widget-date { font-size:18px; }
+    }
 
   
     /* Volné zalomení pro zvětšené písmo, bez změny navigace nebo dat. */

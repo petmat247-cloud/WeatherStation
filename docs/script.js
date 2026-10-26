@@ -1985,6 +1985,7 @@
         }
         this.svg.append(layers);
         this.crosshair=this.node('line',{class:'plot-crosshair',x1:left,x2:left,y1:top,y2:height-bottom,visibility:'hidden','aria-hidden':'true'});this.svg.append(this.crosshair);
+        this.markersGroup=this.node('g',{class:'plot-markers','aria-hidden':'true'});this.svg.append(this.markersGroup);
         this.svg.dataset.renderedPoints=String(renderedPoints);this.svg.dataset.sourcePoints=String(totalVisible);
         this.svg.setAttribute('aria-label',`${this.def.title}, ${primary.unit}. ${totalVisible?'Interaktivní graf. Šipkami procházejte původní měření.':'Ve vybraném období nejsou k dispozici zobrazené hodnoty.'}`);
         const hiddenAll=!available.length && this.def.keys.some(key=>HistoryMath.stats(this.ranged[key]?.points??[]).count>0);
@@ -2047,13 +2048,28 @@
         }
         left=Math.max(6,Math.min(frameW-tooltipW-6,left));
         this.tooltip.style.left=`${left}px`;
-        this.crosshair.setAttribute('x1',cx);this.crosshair.setAttribute('x2',cx);this.crosshair.setAttribute('visibility','visible');
+        this.crosshair.setAttribute('visibility','hidden');
+        if(this.markersGroup){
+          this.markersGroup.replaceChildren();
+          for(const {key,point} of rows){
+            if(point && point.v!==null && Number.isFinite(point.v)){
+              const info=HISTORY_SERIES[key];
+              const px=this.geometry.x(point.t);
+              const py=this.geometry.y(point.v);
+              const color=`var(--plot-${info.color})`;
+              const halo=this.node('circle',{class:'plot-marker-halo',cx:px.toFixed(2),cy:py.toFixed(2),r:8.5,fill:color,'fill-opacity':'.28'});
+              const dot=this.node('circle',{class:'plot-marker-dot',cx:px.toFixed(2),cy:py.toFixed(2),r:5.5,fill:color,stroke:'var(--canvas, #101625)','stroke-width':'2.5'});
+              this.markersGroup.append(halo,dot);
+            }
+          }
+        }
         if(announce)this.element.querySelector('.plot-readout').textContent=summary.join('. ');
       }
       hideTooltip(){
         this.tooltip.hidden=true;
         this.cursorTime=null;
         if(this.crosshair)this.crosshair.setAttribute('visibility','hidden');
+        if(this.markersGroup)this.markersGroup.replaceChildren();
         const state=this.owner.store.state;
         const dataLast=state.data?.series[this.def.keys[0]]?.points;
         const latest=HistoryMath.stats(dataLast??[]).last;
