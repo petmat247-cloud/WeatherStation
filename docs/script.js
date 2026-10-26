@@ -1851,11 +1851,90 @@
           button.addEventListener('click',()=>{if(this.hidden.has(key))this.hidden.delete(key);else this.hidden.add(key);this.draw();});
           this.element.querySelector('.chart-legend').append(button);this.legendButtons.set(key,{button,unavailable});
         }
-        this.svg.addEventListener('pointermove',event=>{if(event.pointerType==='mouse')this.pointer(event,false);});
-        this.svg.addEventListener('pointerdown',event=>{this.pointer(event,true);});
-        this.svg.addEventListener('pointerleave',event=>{if(event.pointerType==='mouse')this.hideTooltip();});
-        this.svg.addEventListener('blur',()=>this.hideTooltip());
-        this.svg.addEventListener('keydown',event=>this.keyboard(event));
+        let isScrubbing = false;
+        let startX = 0;
+        let startY = 0;
+        let isHorizontalDrag = false;
+
+        const onStart = (clientX, clientY) => {
+          isScrubbing = true;
+          startX = clientX;
+          startY = clientY ?? 0;
+          isHorizontalDrag = false;
+          this.handleCoords(clientX, true);
+        };
+
+        const onMove = (clientX, clientY, event) => {
+          if (!isScrubbing && event?.pointerType !== 'mouse') return;
+          if (clientY !== undefined && !isHorizontalDrag) {
+            const dx = Math.abs(clientX - startX);
+            const dy = Math.abs(clientY - startY);
+            if (dx > 6 && dx > dy) {
+              isHorizontalDrag = true;
+            }
+          }
+          if (isHorizontalDrag && event && event.cancelable) {
+            event.preventDefault();
+          }
+          this.handleCoords(clientX, false);
+        };
+
+        const onEnd = (isMouse) => {
+          isScrubbing = false;
+          isHorizontalDrag = false;
+          if (isMouse) this.hideTooltip();
+        };
+
+        // Pointer Events pro myš, pero a dotyková pera
+        this.frame.addEventListener('pointerdown', event => {
+          if (event.pointerType === 'mouse' && event.button !== 0) return;
+          try { this.frame.setPointerCapture(event.pointerId); } catch (_) {}
+          onStart(event.clientX, event.clientY);
+        });
+
+        this.frame.addEventListener('pointermove', event => {
+          if (event.pointerType === 'mouse' || isScrubbing) {
+            onMove(event.clientX, event.clientY, event);
+          }
+        });
+
+        this.frame.addEventListener('pointerup', event => {
+          try { this.frame.releasePointerCapture(event.pointerId); } catch (_) {}
+          onEnd(event.pointerType === 'mouse');
+        });
+
+        this.frame.addEventListener('pointercancel', event => {
+          try { this.frame.releasePointerCapture(event.pointerId); } catch (_) {}
+          onEnd(event.pointerType === 'mouse');
+        });
+
+        this.frame.addEventListener('pointerleave', event => {
+          if (event.pointerType === 'mouse' && !isScrubbing) this.hideTooltip();
+        });
+
+        // Dedikované touch události pro mobilní telefony
+        this.frame.addEventListener('touchstart', event => {
+          if (event.touches && event.touches.length === 1) {
+            onStart(event.touches[0].clientX, event.touches[0].clientY);
+          }
+        }, { passive: true });
+
+        this.frame.addEventListener('touchmove', event => {
+          if (event.touches && event.touches.length === 1) {
+            onMove(event.touches[0].clientX, event.touches[0].clientY, event);
+          }
+        }, { passive: false });
+
+        this.frame.addEventListener('touchend', () => {
+          onEnd(false);
+        }, { passive: true });
+
+        this.frame.addEventListener('touchcancel', () => {
+          onEnd(false);
+        }, { passive: true });
+
+        this.svg.addEventListener('blur', () => this.hideTooltip());
+        this.svg.addEventListener('keydown', event => this.keyboard(event));
         new ResizeObserver(entries=>{const width=Math.round(entries[0].contentRect.width);if(width>0 && width!==this.width && this.owner.isActive()){this.width=width;this.draw();}}).observe(this.frame);
       }
       node(tag,attributes={},text){const el=document.createElementNS('http://www.w3.org/2000/svg',tag);for(const [k,v]of Object.entries(attributes))el.setAttribute(k,String(v));if(text!==undefined)el.textContent=text;return el;}
@@ -1923,10 +2002,14 @@
         const latest=HistoryMath.stats(dataLast??[]).last;
         lastState.textContent=latest && Date.now()-latest.t>this.owner.store.staleAfterMs?'Poslední dostupná měření jsou starší než nastavený limit.':'';
       }
-      pointer(event,announce){
+      handleCoords(clientX,announce){
         if(!this.geometry || !this.visibleKeys?.length)return;
-        const rect=this.svg.getBoundingClientRect(),x=Math.max(this.geometry.left,Math.min(this.geometry.width-this.geometry.right,event.clientX-rect.left));
+        const rect=this.svg.getBoundingClientRect();
+        const x=Math.max(this.geometry.left,Math.min(this.geometry.width-this.geometry.right,clientX-rect.left));
         this.showTooltip(this.range.from+(x-this.geometry.left)/this.geometry.plotWidth*(this.range.to-this.range.from),announce);
+      }
+      pointer(event,announce){
+        this.handleCoords(event.clientX,announce);
       }
       keyboard(event){
         if(event.key==='Escape'){this.hideTooltip();return;}
@@ -1949,12 +2032,36 @@
           if(point && Math.abs(point.t-anchor)>1000){const ownTime=document.createElement('small');ownTime.textContent=this.owner.fullTime(point.t);label.append(ownTime);}
           const value=document.createElement('strong');value.textContent=point?`${this.owner.number(point.v)} ${info.unit}`:'Bez měření';row.append(dot,label,value);this.tooltip.append(row);summary.push(`${info.label}: ${value.textContent}${point&&point.t!==anchor?', '+this.owner.fullTime(point.t):''}`);
         }
+        const primaryRow=rows.find(r=>r.key===this.def.keys[0]);
+        const lastEl=this.element.querySelector('.chart-last-number');
+        if(lastEl && primaryRow?.point && primaryRow.point.v!==null){
+          lastEl.textContent=this.owner.number(primaryRow.point.v);
+        }
         this.tooltip.hidden=false;
-        const cx=this.geometry.x(anchor);this.tooltip.style.left=`${Math.max(3,Math.min(this.geometry.width-this.tooltip.offsetWidth-3,cx+13))}px`;
+        const cx=this.geometry.x(anchor);
+        const tooltipW=this.tooltip.offsetWidth||230;
+        const frameW=this.frame.clientWidth||this.geometry.width;
+        let left=cx+14;
+        if(left+tooltipW>frameW-8){
+          left=cx-tooltipW-14;
+        }
+        left=Math.max(6,Math.min(frameW-tooltipW-6,left));
+        this.tooltip.style.left=`${left}px`;
         this.crosshair.setAttribute('x1',cx);this.crosshair.setAttribute('x2',cx);this.crosshair.setAttribute('visibility','visible');
         if(announce)this.element.querySelector('.plot-readout').textContent=summary.join('. ');
       }
-      hideTooltip(){this.tooltip.hidden=true;this.cursorTime=null;if(this.crosshair)this.crosshair.setAttribute('visibility','hidden');}
+      hideTooltip(){
+        this.tooltip.hidden=true;
+        this.cursorTime=null;
+        if(this.crosshair)this.crosshair.setAttribute('visibility','hidden');
+        const state=this.owner.store.state;
+        const dataLast=state.data?.series[this.def.keys[0]]?.points;
+        const latest=HistoryMath.stats(dataLast??[]).last;
+        const lastEl=this.element.querySelector('.chart-last-number');
+        if(lastEl){
+          lastEl.textContent=latest?this.owner.number(latest.v):'—';
+        }
+      }
     }
 
     class HistoryController {

@@ -25,6 +25,9 @@
 
     html, body {
       overscroll-behavior: none;
+      overflow-x: hidden !important;
+      max-width: 100vw;
+      width: 100%;
     }
 
     body {
@@ -37,6 +40,7 @@
       align-items: center;
       justify-content: center;
       overflow: hidden;
+      overflow-x: hidden !important;
       user-select: none;
       -webkit-user-select: none;
       -webkit-font-smoothing: antialiased;
@@ -516,10 +520,45 @@
       --shadow: 0 12px 32px -20px rgba(39,49,65,.22);
       --text-primary: #20262e; --text-secondary: #59616d;
     }
-    html { scroll-padding-top: 30px; }
+    html { scroll-padding-top: 30px; overflow-x: hidden !important; max-width: 100vw; width: 100%; }
     body {
-      display: block; overflow: auto; overflow-x: hidden; background: var(--canvas); color: var(--ink);
+      display: block; overflow: auto; overflow-x: hidden !important; max-width: 100vw; width: 100%; background: var(--canvas); color: var(--ink);
       user-select: auto; -webkit-user-select: auto; overscroll-behavior-y: auto;
+    }
+
+    /* Skrytí zbytečných textů, vysvětlivek a stavových lišt pro maximální čistotu */
+    .status-chip,
+    .source-note,
+    .history-source,
+    .statistics-source,
+    .records-source,
+    .statistics-valid,
+    .statistics-gust-note,
+    .statistics-rain-note,
+    .statistics-count-note,
+    .statistics-card-kind,
+    .record-availability,
+    .notice,
+    .chart-resolution,
+    .graphs-help {
+      display: none !important;
+    }
+
+    main, .page, .weather-grid, .history-grid, .statistics-grid, .records-grid {
+      max-width: 100% !important;
+      overflow-x: hidden;
+      box-sizing: border-box;
+    }
+
+    .history-card, .plot-frame {
+      max-width: 100% !important;
+      overflow: hidden;
+    }
+
+    .plot-svg {
+      touch-action: pan-y;
+      -webkit-touch-callout: none;
+      user-select: none;
     }
     body::before {
       content: ""; position: fixed; inset: 0; pointer-events: none; z-index: -1;
