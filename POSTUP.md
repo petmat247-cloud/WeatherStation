@@ -242,3 +242,13 @@ Chat 11 — Nasazení nového Liquid Glass designu (26. října 2026):
   - **Statistiky**: `/api/stats` přímo mapované do 9 karet bez nutnosti stahovat statisíce záznamů.
   - **Rekordy**: `/api/records` mapované do 18 karet rekordů a widgetu historie.
 - Přidána skleněná přepínací tlačítka v hlavičkách pro okamžité přepínání mezi novým a starým webem.
+
+Chat 12 — Čistění UI, odstranění vodorovného posunu a plynulé procházení grafů (26. října 2026):
+- **Skrytí nadbytečných textů a stavových pilulek**:
+  - Pomocí CSS skryty stavové lišty `.status-chip` ("Měření je aktuální", "Historie je k dispozici", apod.), vysvětlující textové bloky (`.source-note`, `.history-source`, `.statistics-source`, `.records-source`), dlouhá patička `.notice` a doplňkové texty karet pro čistý moderní vzhled.
+- **Odstranění horizontálního posunu**:
+  - Přidáno striktní `overflow-x: hidden !important; max-width: 100vw; width: 100%;` na `html, body`, hlavní kontejnery i rámy grafů.
+- **Plynulý scrubbing grafů na dotykových displejích i myší**:
+  - V `docs/script.js` implementován nepřetržitý scrubbing s odchytáváním `touchstart`, `touchmove`, `pointerdown`, `pointermove`.
+  - Při vodorovném tažení se zamezuje trhání stránky, bublina s hodnotami se plynule posouvá v reálném čase (60 fps) a dynamicky aktualizuje i číslo v záhlaví karty.
+  - Přidáno inteligentní překlápění bubliny doleva v blízkosti pravého okraje, aby nepřetékala ani nezakrývala prst.
