@@ -2534,10 +2534,13 @@
           value.textContent=record?(def.period==='dry'?this.count.format(record.value):this.number.format(record.value)):'—';
           node.querySelector('.record-unit').textContent=record?.unit??def.unit;
           node.querySelector('.record-availability').textContent=record?(status==='error'||status==='loading'||stale?'Poslední dostupný rekord':'Historický rekord'):status==='loading'?'Načítání podkladů…':data&&!data.complete?'Nelze potvrdit z neúplné historie':empty?'Žádná měření':'Zatím nedostupné';
-          const time=node.querySelector('.record-time');time.replaceChildren();
-          if(record?.from!==null&&record?.from!==undefined){time.append(this.time(record.from,'Od: '),this.time(record.to,'Do: '));}
-          else if(record?.at!==null&&record?.at!==undefined)time.append(this.time(record.at));
-          else time.textContent=record?'Datum a čas nejsou dostupné':'Čas rekordu není k dispozici';
+          const time=node.querySelector('.record-time');
+          if(time){
+            time.replaceChildren();
+            if(record?.from!==null&&record?.from!==undefined){time.append(this.time(record.from,'Od: '),this.time(record.to,'Do: '));}
+            else if(record?.at!==null&&record?.at!==undefined)time.append(this.time(record.at));
+            else time.textContent=record?'Datum a čas nejsou dostupné':'Čas rekordu není k dispozici';
+          }
         }
         this.renderHistoryWidget();
       }

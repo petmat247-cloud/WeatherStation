@@ -279,3 +279,13 @@ Chat 14 — Vycentrování widgetu historie, zvýrazňovací bod v grafech a mob
   - Na telefonech (`@media (max-width: 600px)`) uspořádány prvky v `.header-right-actions` vertikálně pod sebe (`flex-direction: column; align-items: flex-end;`).
   - Přepínač tmavého/světlého režimu (`.theme-control`) je nahoře s dostatkem prostoru vlevo od okraje, takže jsou obě ikony (sluníčko i měsíček) i stav přepínače zřetelně a celé vidět bez ořezání.
   - Tlačítko „Původní web“ (`.switch-site-btn`) je umístěno přímo pod přepínačem režimu.
+
+Chat 15 — Úpravy statistik a odstranění zástupného data u období sucha (27. října 2026):
+- **Odstranění indexu 01 / 09 a posunutí nadpisu nahoru**:
+  - Trvale skryt horní řádek `.statistics-card-kicker` a indexy `.statistics-card-index` (`01 / 09`, `02 / 09` atd.).
+  - Nadpis období (`<h3>`, např. „Poslední hodina“) byl posunut zcela nahoru bez horního odsazení.
+- **Sjednocení velikosti hodnot Průměr, Maximum a Minimum**:
+  - Všechny tři hodnoty v `.statistics-three dd` i `.stat-average dd` mají nyní stejnou výraznou velikost (`font-size: 26px`, na tabletech `28px`) a tučnost (`font-weight: 500`). Sloupce jsou rozděleny symetricky 1:1:1.
+- **Odstranění zástupného data u „Nejdelší období bez deště“**:
+  - U karty `#record-dryLongest` byl zcela skryt spodní řádek `.record-occurrence` (ikona hodin a hláška „Datum a čas nejsou dostupné“).
+  - Karta nyní zobrazuje čistě hodnotu délky sucha (např. „15 dní“), protože se jedná o agregovaný úsek/sérii dní, nikoli o jednorázový bodový čas.

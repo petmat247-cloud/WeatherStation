@@ -537,6 +537,9 @@
     .statistics-rain-note,
     .statistics-count-note,
     .statistics-card-kind,
+    .statistics-card-kicker,
+    .statistics-card-index,
+    #record-dryLongest .record-occurrence,
     .record-availability,
     .notice,
     .chart-resolution,
@@ -887,19 +890,19 @@
     #page-statistiky.page { padding:36px 0 0; text-align:left; }
     .statistics-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:18px; align-items:stretch; }
     .statistics-card { padding:23px 20px 18px; min-width:0; display:flex; flex-direction:column; scroll-margin-top:100px; }
-    .statistics-card-head { border-bottom:1px solid var(--line); padding-bottom:16px; margin-bottom:3px; }
-    .statistics-card-kicker { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:11px; font-size:10.8px; letter-spacing:1.3px; text-transform:uppercase; color:var(--muted); }
-    .statistics-card-index { color:var(--faint); font-size:10.8px; font-variant-numeric:tabular-nums; letter-spacing:.8px; }
-    .statistics-card h3 { font-size:24px; letter-spacing:-.6px; line-height:1.25; font-weight:550; }
-    .statistics-card-range { margin-top:9px; color:var(--muted); font-size:12px; line-height:1.8; font-variant-numeric:tabular-nums; }
+    .statistics-card-head { border-bottom:1px solid var(--line); padding-bottom:14px; margin-bottom:3px; }
+    .statistics-card-kicker { display:none !important; }
+    .statistics-card-index { display:none !important; }
+    .statistics-card h3 { font-size:24px; letter-spacing:-.6px; line-height:1.25; font-weight:600; margin-top:0; }
+    .statistics-card-range { margin-top:6px; color:var(--muted); font-size:12px; line-height:1.7; font-variant-numeric:tabular-nums; }
     .statistics-card-range time { white-space:nowrap; }
     .statistics-measure { padding:15px 0 13px; border-bottom:1px solid var(--line); }
     .statistics-measure-title { display:flex; align-items:center; gap:8px; color:var(--muted); font-size:13.2px; font-weight:500; margin-bottom:11px; }
     .statistics-measure-title .icon { width:15px; height:15px; color:var(--metric-color,var(--accent-amber)); }
-    .statistics-three { display:grid; grid-template-columns:1.15fr 1fr 1fr; gap:8px; align-items:end; }
+    .statistics-three { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; align-items:end; }
     .statistics-three dt { font-size:10.8px; color:var(--muted); margin-bottom:5px; }
-    .statistics-three dd { display:flex; align-items:baseline; gap:3px; font-size:19.2px; line-height:1.2; font-variant-numeric:tabular-nums; letter-spacing:-.6px; }
-    .statistics-three .stat-average dd { font-size:30px; font-weight:500; letter-spacing:-1px; }
+    .statistics-three dd { display:flex; align-items:baseline; gap:3px; font-size:26px; font-weight:500; line-height:1.2; font-variant-numeric:tabular-nums; letter-spacing:-.6px; }
+    .statistics-three .stat-average dd { font-size:26px; font-weight:500; letter-spacing:-.6px; }
     .statistics-three .stat-unit { color:var(--muted); font-size:12px; font-weight:400; letter-spacing:0; }
     .stat-is-missing { color:var(--faint); }
     .statistics-valid { font-size:10.8px; color:var(--faint); margin-top:9px; line-height:1.6; }
@@ -932,11 +935,11 @@
       body[data-section="statistiky"] .statistics-period-nav .seg-control { width:100%; }
       .statistics-desktop-caption { display:none; }
       .statistics-mobile-caption { display:inline; }
-      .statistics-card { padding:24px; }
+      .statistics-card { padding:22px 20px 18px; }
       .statistics-three { grid-template-columns:1fr 1fr 1fr; }
-      .statistics-three .stat-average dd { font-size:33.6px; }
-      .statistics-three dd { font-size:24px; }
-      .statistics-three .stat-unit { font-size:14.4px; }
+      .statistics-three .stat-average dd,
+      .statistics-three dd { font-size:28px; font-weight:500; }
+      .statistics-three .stat-unit { font-size:14px; }
       .statistics-three dt { font-size:12px; }
       .statistics-single-value { font-size:30px; }
     }
@@ -946,27 +949,28 @@
       .statistics-source { padding:17px; margin-bottom:12px; border-radius:20px; }
       .statistics-source-top { flex-direction:column; align-items:flex-start; gap:12px; }
       .statistics-source-text { font-size:13.2px; }
-      .statistics-card { padding:21px 18px 18px; border-radius:23px; }
-      .statistics-card h3 { font-size:26.4px; }
-      .statistics-card-range { font-size:12px; }
-      .statistics-three .stat-average dd { font-size:32.4px; }
-      .statistics-three dd { font-size:21.6px; }
-      .statistics-three .stat-unit { font-size:13.2px; }
-      .statistics-measure { padding:16px 0 13px; }
-      .statistics-measure-title { font-size:14.4px; }
+      .statistics-card { padding:18px 18px 16px; border-radius:23px; }
+      .statistics-card-head { padding-bottom:12px; }
+      .statistics-card h3 { font-size:26.4px; margin-top:0; }
+      .statistics-card-range { font-size:12px; margin-top:6px; }
+      .statistics-three .stat-average dd,
+      .statistics-three dd { font-size:26px; font-weight:500; }
+      .statistics-three .stat-unit { font-size:13px; }
+      .statistics-measure { padding:15px 0 12px; }
+      .statistics-measure-title { font-size:14px; }
       .statistics-valid { font-size:12px; }
       .statistics-single .statistics-measure-title { font-size:13.2px; }
       .statistics-single-note { font-size:12px; }
       .statistics-count-note { font-size:12px; }
-      .statistics-count-number { font-size:31.2px; }
+      .statistics-count-number { font-size:30px; }
       .statistics-period-nav { margin:0 0 15px; }
       .statistics-explanation { font-size:12px; }
     }
     @media (max-width:360px) {
-      .statistics-card { padding:20px 15px 17px; }
-      .statistics-three .stat-average dd { font-size:28.8px; }
-      .statistics-three dd { font-size:19.2px; }
-      .statistics-three .stat-unit { font-size:12px; }
+      .statistics-card { padding:16px 14px 15px; }
+      .statistics-three .stat-average dd,
+      .statistics-three dd { font-size:22px; font-weight:500; }
+      .statistics-three .stat-unit { font-size:11.5px; }
       .statistics-three { gap:6px; }
     }
 
