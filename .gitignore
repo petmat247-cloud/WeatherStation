@@ -8,6 +8,12 @@ Thumbs.db
 # Wrangler lokální cache
 .wrangler/
 
+# Lokální tajné konfigurační soubory (nikdy nenahrávat na GitHub)
+.env
+.env.*
+.dev.vars
+.dev.vars.*
+
 # Editor
 .vscode/
 .idea/

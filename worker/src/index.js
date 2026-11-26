@@ -102,10 +102,11 @@ function maxNullable(a, b) {
 
 function securityHeaders() {
   return {
-    'X-Content-Type-Options' : 'nosniff',
-    'X-Frame-Options'        : 'DENY',
-    'Referrer-Policy'        : 'strict-origin-when-cross-origin',
-    'Cache-Control'          : 'no-store',
+    'X-Content-Type-Options'    : 'nosniff',
+    'X-Frame-Options'           : 'DENY',
+    'Referrer-Policy'           : 'strict-origin-when-cross-origin',
+    'Strict-Transport-Security' : 'max-age=31536000; includeSubDomains',
+    'Cache-Control'             : 'no-store',
   };
 }
 
@@ -1488,8 +1489,10 @@ async function fetchFromWeathercloud(deviceId, cookie, collectLog = false) {
 
   let lastError = null;
   const diagnostics = [];
+  let attempt = 0;
 
   for (const id of idsToTry) {
+    attempt++;
     const url = `https://app.weathercloud.net/device/values?code=${id}`;
     try {
       const response = await fetch(url, {
@@ -1505,13 +1508,13 @@ async function fetchFromWeathercloud(deviceId, cookie, collectLog = false) {
 
       if (response.status === 401 || response.status === 403) {
         if (collectLog) {
-          diagnostics.push({ id, status: response.status, isJson: false, hasIndoorFields: false });
+          diagnostics.push({ attempt, status: response.status, isJson: false, hasIndoorFields: false });
         }
         throw new Error(`Weathercloud vrátil status ${response.status} (neplatná/vypršená session cookie nebo blokace)`);
       }
       if (!response.ok) {
         if (collectLog) {
-          diagnostics.push({ id, status: response.status, isJson: false, hasIndoorFields: false });
+          diagnostics.push({ attempt, status: response.status, isJson: false, hasIndoorFields: false });
         }
         throw new Error(`Weathercloud HTTP chyba: ${response.status}`);
       }
@@ -1522,14 +1525,14 @@ async function fetchFromWeathercloud(deviceId, cookie, collectLog = false) {
         data = JSON.parse(text);
       } catch (_) {
         if (collectLog) {
-          diagnostics.push({ id, status: response.status, isJson: false, hasIndoorFields: false });
+          diagnostics.push({ attempt, status: response.status, isJson: false, hasIndoorFields: false });
         }
         throw new Error('Weathercloud nevrátil validní JSON (pravděpodobně vypršená session cookie)');
       }
 
       const hasIndoorFields = Boolean(data && (data.tempin !== undefined || data.humin !== undefined));
       if (collectLog) {
-        diagnostics.push({ id, status: response.status, isJson: true, hasIndoorFields });
+        diagnostics.push({ attempt, status: response.status, isJson: true, hasIndoorFields });
       }
 
       if (!hasIndoorFields) {
@@ -1540,8 +1543,11 @@ async function fetchFromWeathercloud(deviceId, cookie, collectLog = false) {
       return { tempIn, humIn, usedId: id, diagnostics };
     } catch (err) {
       lastError = err;
-      if (collectLog && !diagnostics.some(d => d.id === id)) {
-        diagnostics.push({ id, error: err.message });
+      if (collectLog && !diagnostics.some(d => d.attempt === attempt)) {
+        const safeMsg = err.message.startsWith('Weathercloud')
+          ? err.message
+          : 'Chyba spojení se službou Weathercloud';
+        diagnostics.push({ attempt, error: safeMsg });
       }
     }
   }
@@ -1717,7 +1723,7 @@ async function handleTestWeathercloud(request, env, corsHdrs, cache, ctx) {
     }, 400, corsHdrs);
   }
 
-  const cacheKey = new Request(`${url.origin}/api/test-wc`, { method: 'GET' });
+  const cacheKey = new Request(`${url.origin}/api/test-wc?v=2`, { method: 'GET' });
   if (cache) {
     try {
       const cached = await cache.match(cacheKey);
@@ -1730,7 +1736,7 @@ async function handleTestWeathercloud(request, env, corsHdrs, cache, ctx) {
 
   try {
     await ensureRecordsTable(env.DB);
-    const { tempIn, humIn, usedId, diagnostics } = await fetchFromWeathercloud(deviceId, cookie, true);
+    const { tempIn, humIn, diagnostics } = await fetchFromWeathercloud(deviceId, cookie, true);
 
     let dbResult = null;
     if (tempIn !== null || humIn !== null) {
@@ -1748,7 +1754,6 @@ async function handleTestWeathercloud(request, env, corsHdrs, cache, ctx) {
     const payload = {
       success: true,
       message: 'Weathercloud spojení funguje a data byla uložena!',
-      usedId,
       tempIn,
       humIn,
       dbResult,
