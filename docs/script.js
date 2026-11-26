@@ -4,6 +4,11 @@
   
 
 /* Weather Station — navigace, komponenty a datová rozhraní. */
+    const REDUCED_MOTION_MQ = window.matchMedia('(prefers-reduced-motion: reduce)');
+    let prefersReducedMotion = REDUCED_MOTION_MQ.matches;
+    try {
+      REDUCED_MOTION_MQ.addEventListener('change', (e) => { prefersReducedMotion = e.matches; });
+    } catch (_) {}
     /* ==========================================================================
        POMOCNÁ FUNKCE PRO SYNCHRONIZACI STAVU DO URL (BEZ RELOADU)
        ========================================================================== */
@@ -336,7 +341,7 @@
       }
 
       setInteracting(state) {
-        state = state && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        state = state && !prefersReducedMotion;
         this.isInteracting = state;
         this.control.classList.toggle('is-interacting', state);
         if (!state) {
@@ -462,7 +467,7 @@
         this.animFromLensScaleY = this.lensScaleY;
         this.edgeNudgeDir       = edgeBumpDir;
 
-        this.animDuration  = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 1 : durationMs;
+        this.animDuration  = prefersReducedMotion ? 1 : durationMs;
         this.animStartTime = performance.now();
 
         const step = (now) => {
@@ -512,8 +517,8 @@
       }
 
       render() {
-        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-          this.barX = this.barY = this.currY = this.currLensY = 0;
+        if (prefersReducedMotion) {
+          this.barX = this.barY = this.currLensY = 0;
           this.barScaleX = this.barScaleY = this.lensScaleX = this.lensScaleY = 1;
         }
         this.track.style.transform   = `translate3d(${this.currLensX.toFixed(2)}px, ${this.currLensY.toFixed(2)}px, 0)`;
@@ -858,7 +863,7 @@
       }
 
       setInteracting(state) {
-        state = state && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        state = state && !prefersReducedMotion;
         this.isInteracting = state;
         this.tabbar.classList.toggle('is-interacting', state);
         if (!state) {
@@ -925,7 +930,7 @@
         this.animFromLensScaleY = this.lensScaleY;
         this.edgeNudgeDir       = edgeBumpDir;
 
-        this.animDuration  = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 1 : durationMs;
+        this.animDuration  = prefersReducedMotion ? 1 : durationMs;
         this.animStartTime = performance.now();
 
         const step = (now) => {
@@ -972,8 +977,8 @@
       }
 
       render() {
-        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-          this.barX = this.barY = this.currY = this.currLensY = 0;
+        if (prefersReducedMotion) {
+          this.barX = this.barY = this.currY = 0;
           this.barScaleX = this.barScaleY = this.lensScaleX = this.lensScaleY = 1;
         }
         this.track.style.transform  = `translate3d(${this.currX.toFixed(2)}px, ${this.currY.toFixed(2)}px, 0)`;
@@ -1266,7 +1271,7 @@
       }
 
       setInteracting(state) {
-        state = state && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        state = state && !prefersReducedMotion;
         this.isInteracting = state;
         this.control.classList.toggle('is-interacting', state);
       }
@@ -1325,7 +1330,7 @@
         this.animFromLensScaleY = this.lensScaleY;
         this.edgeNudgeDir       = edgeBumpDir;
 
-        this.animDuration  = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 1 : durationMs;
+        this.animDuration  = prefersReducedMotion ? 1 : durationMs;
         this.animStartTime = performance.now();
 
         const step = (now) => {
@@ -1372,8 +1377,8 @@
       }
 
       render() {
-        if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-          this.barX = this.barY = this.currY = this.currLensY = 0;
+        if (prefersReducedMotion) {
+          this.barX = this.barY = this.currY = 0;
           this.barScaleX = this.barScaleY = this.lensScaleX = this.lensScaleY = 1;
         }
         this.track.style.transform   = `translate3d(${this.currX.toFixed(2)}px, ${this.currY.toFixed(2)}px, 0)`;
@@ -2286,7 +2291,7 @@
         const now=performance.now();if(this.selected===code&&this.jumping&&now-this.lastNavigation<100)return;
         this.lastNavigation=now;this.selected=code;this.markCurrent();updateUrlParam('statsPeriod',code);this.jumping=true;
         const node=this.cards.get(code),top=Math.max(0,window.scrollY+node.getBoundingClientRect().top-this.navigationOffset());
-        window.scrollTo({top,behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});
+        window.scrollTo({top,behavior:prefersReducedMotion?'instant':'smooth'});
         clearTimeout(this.scrollEndTimer);this.scrollEndTimer=setTimeout(()=>{this.jumping=false;this.scrollSpy();},180);
       }
       onScroll(){

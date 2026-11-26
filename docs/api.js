@@ -19,6 +19,8 @@
   let recordsLoaded = false;
   let cachedDryDays = null;
   let lastCurrentFetchAt = 0;
+  let latestRawCurrent = null;
+  let currentInFlight = null;
   let recordsMemoryCache = null; // { time, data }
   let recordsInFlight = null;
   const historyMemoryCache = new Map();
@@ -86,41 +88,50 @@
   // ── 1. Aktuální data (pouze lehký /api/current, 1–3 D1 row reads) ───────────
 
   async function fetchCurrentData() {
-    try {
-      window.WeatherStation?.setLoading();
+    if (currentInFlight) return currentInFlight;
 
-      const resCurr = await fetch(`${API_BASE}/api/current`);
-      if (!resCurr.ok) throw new Error(`HTTP ${resCurr.status}`);
-      const curr = await resCurr.json();
+    currentInFlight = (async () => {
+      try {
+        window.WeatherStation?.setLoading();
 
-      // Pokud právě prší nebo dnes pršelo, série sucha je okamžitě 0
-      const isRaining = (curr.rain_rate && curr.rain_rate > 0) || (curr.rain_total && curr.rain_total > 0);
-      const dryDays = isRaining ? 0 : (cachedDryDays ?? 0);
+        const resCurr = await fetch(`${API_BASE}/api/current`);
+        if (!resCurr.ok) throw new Error(`HTTP ${resCurr.status}`);
+        const curr = await resCurr.json();
+        latestRawCurrent = curr;
 
-      const payload = {
-        timestamp: curr.timestamp,
-        measuredAt: new Date(curr.timestamp * 1000).toISOString(),
-        sourceUpdatedAt: new Date().toISOString(),
-        outsideC: curr.temp_out,
-        insideC: curr.temp_in,
-        outsideHumidity: curr.humidity_out,
-        insideHumidity: curr.humidity_in,
-        pressureHpa: curr.pressure,
-        pressureKind: 'seaLevel',
-        speedMps: curr.wind_speed,
-        directionDeg: curr.wind_dir,
-        rainHour: curr.rain_1h ?? curr.rain_rate,
-        rainDay: curr.rain_total,
-        dryDays,
-        lastRainAt: null
-      };
+        // Pokud právě prší nebo dnes pršelo, série sucha je okamžitě 0
+        const isRaining = (curr.rain_rate && curr.rain_rate > 0) || (curr.rain_total && curr.rain_total > 0);
+        const dryDays = isRaining ? 0 : (cachedDryDays ?? 0);
 
-      window.WeatherStation?.accept(payload);
-      lastCurrentFetchAt = Date.now();
-    } catch (err) {
-      console.error('[API] Chyba načítání aktuálních dat:', err);
-      window.WeatherStation?.setError(`Nepodařilo se načíst data: ${err.message}`);
-    }
+        const payload = {
+          timestamp: curr.timestamp,
+          measuredAt: new Date(curr.timestamp * 1000).toISOString(),
+          sourceUpdatedAt: new Date().toISOString(),
+          outsideC: curr.temp_out,
+          insideC: curr.temp_in,
+          outsideHumidity: curr.humidity_out,
+          insideHumidity: curr.humidity_in,
+          pressureHpa: curr.pressure,
+          pressureKind: 'seaLevel',
+          speedMps: curr.wind_speed,
+          directionDeg: curr.wind_dir,
+          rainHour: curr.rain_1h ?? curr.rain_rate,
+          rainDay: curr.rain_total,
+          dryDays,
+          lastRainAt: null
+        };
+
+        window.WeatherStation?.accept(payload);
+        lastCurrentFetchAt = Date.now();
+      } catch (err) {
+        console.error('[API] Chyba načítání aktuálních dat:', err);
+        window.WeatherStation?.setError(`Nepodařilo se načíst data: ${err.message}`);
+      } finally {
+        currentInFlight = null;
+      }
+    })();
+
+    return currentInFlight;
   }
 
   // ── 2. Historie (Grafy s paměťovou cache + Edge Cache) ──────────────────────
@@ -156,7 +167,18 @@
       const res = await fetch(`${API_BASE}/api/history?from=${from}&to=${now}&limit=${limit}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
-      const rows = json.data ?? [];
+      const rows = (json.data ?? []).slice();
+
+      // Pro delší rozsahy (7d+ zaokrouhlené kvůli Edge Cache) doplníme z paměti poslední živý bod z /api/current (0 extra D1 čtení)
+      if (stepSec >= 3600) {
+        if (!latestRawCurrent && currentInFlight) {
+          await currentInFlight.catch(() => {});
+        }
+        const lastTs = rows.at(-1)?.timestamp ?? 0;
+        if (latestRawCurrent?.timestamp && latestRawCurrent.timestamp > lastTs && latestRawCurrent.timestamp <= nowRaw + 60) {
+          rows.push(latestRawCurrent);
+        }
+      }
 
       if (!rows.length) {
         window.WeatherHistory?.setError('Pro vybrané období nejsou k dispozici žádná data.');
