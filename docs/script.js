@@ -2092,7 +2092,7 @@
         window.addEventListener('meteo:timechange',event=>{if(document.body.dataset.section==='statistiky')return;this.code=event.detail.code;this.schedule();});
         window.addEventListener('meteo:sectionchange',()=>this.mount());
         window.addEventListener('pointerdown',event=>{if(!event.target.closest('.plot-frame'))this.charts.forEach(chart=>chart.hideTooltip());},{passive:true});
-        setInterval(()=>{if(this.isActive() && !document.hidden)this.schedule();},60000);
+        setInterval(()=>{if(this.isActive() && !document.hidden && this.charts.every(c=>c.cursorTime===null))this.schedule();},60000);
         document.addEventListener('visibilitychange',()=>{if(!document.hidden && this.isActive())this.schedule();});
         this.mount();
         window.WeatherHistory=Object.freeze({
@@ -2342,7 +2342,7 @@
           }
           this.setValue(card.querySelector('[data-value="gust"]'),summary.gust?.value);card.querySelector('.statistics-gust-note').textContent=summary.gust?.n?`Z ${this.formatCount.format(summary.gust.n)} záznamů nárazů`:'Nárazy větru nejsou dostupné';
           const rain=summary.rain||{};this.setValue(card.querySelector('[data-value="rain"]'),rain.value);
-          card.querySelector('.statistics-rain-label').textContent=rain.kind==='intensity'?'Maximální intenzita srážek':rain.value!==null?'Úhrn mezi odečty':'Maximální intenzita srážek';
+          card.querySelector('.statistics-rain-label').textContent=rain.kind==='intensity'?'Maximální intenzita srážek':rain.kind==='total'?'Celkový úhrn srážek':rain.value!==null?'Úhrn mezi odečty':'Maximální intenzita srážek';
           card.querySelector('.statistics-rain-unit').textContent=rain.kind==='intensity'?'mm/h':rain.value!==null?'mm':'mm/h';
           card.querySelector('.statistics-rain-note').textContent=rain.kind==='intensity'?`Z ${this.formatCount.format(rain.n)} měření intenzity`:rain.value!==null?`Intenzita není dostupná. Odečty: ${this.shortDate.format(rain.from)} — ${this.shortDate.format(rain.to)}`:data?(rain.reason||'Intenzita není dostupná'):'Intenzita zatím není dostupná';
           this.setValue(card.querySelector('.statistics-count-number'),summary.count ?? summary.availableCount,true);

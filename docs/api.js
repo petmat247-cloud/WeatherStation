@@ -1,7 +1,7 @@
 /**
  * WeatherStation — Liquid Glass API Adapter
  * Připojení na Cloudflare Worker REST API:
- *   GET /api/current   — aktuální měření stanice
+ *   GET /api/current   — aktuální měření stanice (+ rain_1h)
  *   GET /api/history   — historická data pro grafy
  *   GET /api/stats     — souhrnné statistiky za časová období
  *   GET /api/records   — absolutní rekordy a série sucha
@@ -11,12 +11,16 @@
 
 (function () {
   const API_BASE = 'https://stanice-worker.petmat247.workers.dev';
-  const REFRESH_INTERVAL_MS = 60_000; // 1 minuta
+  const REFRESH_INTERVAL_MS = 60_000;   // 1 minuta
+  const RECORDS_CACHE_TTL_MS = 3600_000; // 1 hodina
 
   let currentRangeCode = '24h';
   let statsLoaded = false;
   let recordsLoaded = false;
   let cachedDryDays = null;
+  let lastCurrentFetchAt = 0;
+  let recordsMemoryCache = null; // { time, data }
+  let recordsInFlight = null;
   const historyMemoryCache = new Map();
 
   // ── Převody rozsahů ──────────────────────────────────────────────────────────
@@ -40,22 +44,46 @@
     return code === '1h' ? 70 : 1440;
   }
 
-  // ── Série sucha (načítá se samostatně 1× za hodinu, ne po minutách) ──────────
+  // ── Sdílené načítání /api/records (1× za hodinu + deduplikace) ──────────────
 
-  async function fetchDryStreak() {
-    try {
+  async function getRecordsPayload(force = false) {
+    if (!force && recordsMemoryCache && (Date.now() - recordsMemoryCache.time < RECORDS_CACHE_TTL_MS)) {
+      return recordsMemoryCache.data;
+    }
+
+    if (recordsInFlight) {
+      return recordsInFlight;
+    }
+
+    recordsInFlight = (async () => {
       const res = await fetch(`${API_BASE}/api/records`);
-      if (!res.ok) return;
-      const rec = await res.json();
-      if (rec.dry_streak !== undefined && rec.dry_streak !== null) {
-        cachedDryDays = rec.dry_streak;
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      recordsMemoryCache = { time: Date.now(), data };
+      if (data.dry_streak !== undefined && data.dry_streak !== null) {
+        cachedDryDays = data.dry_streak;
       }
+      return data;
+    })();
+
+    try {
+      return await recordsInFlight;
+    } finally {
+      recordsInFlight = null;
+    }
+  }
+
+  // ── Série sucha (využívá sdílenou mezipaměť /api/records) ───────────────────
+
+  async function fetchDryStreak(force = false) {
+    try {
+      await getRecordsPayload(force);
     } catch (_) {
       // Při chybě ponecháme stávající nebo 0
     }
   }
 
-  // ── 1. Aktuální data (pouze lehký /api/current, 0 D1 scanů) ─────────────────
+  // ── 1. Aktuální data (pouze lehký /api/current, 1–3 D1 row reads) ───────────
 
   async function fetchCurrentData() {
     try {
@@ -65,7 +93,7 @@
       if (!resCurr.ok) throw new Error(`HTTP ${resCurr.status}`);
       const curr = await resCurr.json();
 
-      // Pokud právě prší, sucho je okamžitě 0
+      // Pokud právě prší nebo dnes pršelo, série sucha je okamžitě 0
       const isRaining = (curr.rain_rate && curr.rain_rate > 0) || (curr.rain_total && curr.rain_total > 0);
       const dryDays = isRaining ? 0 : (cachedDryDays ?? 0);
 
@@ -81,13 +109,14 @@
         pressureKind: 'seaLevel',
         speedMps: curr.wind_speed,
         directionDeg: curr.wind_dir,
-        rainHour: curr.rain_rate,
+        rainHour: curr.rain_1h ?? curr.rain_rate,
         rainDay: curr.rain_total,
         dryDays,
         lastRainAt: null
       };
 
       window.WeatherStation?.accept(payload);
+      lastCurrentFetchAt = Date.now();
     } catch (err) {
       console.error('[API] Chyba načítání aktuálních dat:', err);
       window.WeatherStation?.setError(`Nepodařilo se načíst data: ${err.message}`);
@@ -101,7 +130,9 @@
 
     // Kontrola paměťové mezipaměti v prohlížeči (zabraňuje opakovaným dotazům při klikání na záložky)
     const memCache = historyMemoryCache.get(currentRangeCode);
-    const memTtlMs = ['60d', '90d', '180d', '1y', 'all'].includes(currentRangeCode) ? 3600_000 : 300_000;
+    const memTtlMs = currentRangeCode === '1h'
+      ? 120_000
+      : ['60d', '90d', '180d', '1y', 'all'].includes(currentRangeCode) ? 3600_000 : 300_000;
     if (memCache && (Date.now() - memCache.time < memTtlMs)) {
       window.WeatherHistory?.accept(memCache.data);
       return;
@@ -184,9 +215,12 @@
       const now = Date.now();
       const summaries = periodMappings.map(p => {
         const d = p.data || {};
-        const from = p.dur ? now - p.dur : (now - 150 * 86400000);
+        const from = p.dur
+          ? now - p.dur
+          : (d.from_ts ? d.from_ts * 1000 : (now - 150 * 86400000));
         const to = now;
         const recCount = d.records ?? 0;
+        const rainTotal = d.total_rain ?? d.max_rain ?? null;
         return {
           code: p.code,
           from,
@@ -222,8 +256,8 @@
             n: recCount
           },
           rain: {
-            kind: 'counter',
-            value: d.max_rain ?? null,
+            kind: d.total_rain != null ? 'total' : 'counter',
+            value: rainTotal,
             from: from,
             to: to,
             unit: 'mm'
@@ -250,9 +284,7 @@
     try {
       window.WeatherRecords?.setLoading();
 
-      const res = await fetch(`${API_BASE}/api/records`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const r = await res.json();
+      const r = await getRecordsPayload(force);
 
       const formatAt = (ts) => ts ? new Date(ts * 1000).toISOString() : null;
       const rec = r.records || {};
@@ -273,7 +305,7 @@
         gustMax:        { value: rec.gustMax?.value ?? r.wind_gust_max, unit: 'm/s', at: formatAt(rec.gustMax?.timestamp ?? r.wind_gust_max_time) },
         windMax:        { value: rec.windMax?.value ?? r.wind_speed_max, unit: 'm/s', at: formatAt(rec.windMax?.timestamp ?? r.wind_speed_max_time) },
         rainRateMax:    { value: rec.rainRateMax?.value ?? r.rain_rate_max, unit: 'mm/h', at: formatAt(rec.rainRateMax?.timestamp ?? r.rain_rate_max_time) },
-        rainHourMax:    { value: rec.rainRateMax?.value ?? r.rain_rate_max, unit: 'mm', at: formatAt(rec.rainRateMax?.timestamp ?? r.rain_rate_max_time) },
+        rainHourMax:    { value: rec.rainHourMax?.value ?? r.rain_hour_max ?? null, unit: 'mm', at: formatAt(rec.rainHourMax?.timestamp ?? r.rain_hour_max_time) },
         rainDayMax:     { value: rec.rainDayMax?.value ?? r.rain_total_max, unit: 'mm', at: formatAt(rec.rainDayMax?.timestamp ?? r.rain_total_max_time) },
         dryLongest:     { value: r.max_dry_streak, unit: 'dní' }
       };
@@ -305,18 +337,14 @@
   }
 
   function init() {
-    // Malá prodleva pro zaručení, že controllery v script.js jsou plně inicializované
     setTimeout(function () {
       fetchDryStreak();
       fetchCurrentData();
 
-      // Pokud byla načtena jiná sekce (např. přes URL hash nebo parametr)
       onSectionChange();
 
-      // Sledování přepínání sekcí
       window.addEventListener('meteo:sectionchange', onSectionChange);
 
-      // Sledování přepínání časových rozsahů
       window.addEventListener('meteo:timechange', function (e) {
         if (e.detail?.code) {
           currentRangeCode = e.detail.code;
@@ -326,23 +354,43 @@
         }
       });
 
-      // Pravidelná obnova každou minutu (pouze lehký /api/current, 0 D1 scanů)
+      // Pravidelná obnova každou minutu (jen lehký /api/current + krátké grafy, je-li záložka Grafy otevřená)
       setInterval(function () {
+        if (document.hidden) return;
         fetchCurrentData();
-        if (document.body.dataset.section === 'grafy') {
-          // Grafy obnovujeme pouze pro krátké rozsahy (1h, 24h), dlouhodobé grafy se nemění každou minutu
-          if (['1h', '24h'].includes(currentRangeCode)) {
-            fetchHistoryData(currentRangeCode);
-          }
+        if (document.body.dataset.section === 'grafy' && ['1h', '24h'].includes(currentRangeCode)) {
+          fetchHistoryData(currentRangeCode);
         }
       }, REFRESH_INTERVAL_MS);
 
-      // Těžká data (série sucha, statistiky, rekordy) se obnovují pouze 1× za hodinu
-      setInterval(function () {
-        fetchDryStreak();
-        fetchStatisticsData(true);
-        fetchRecordsData(true);
-      }, 3600_000);
+      // Obnova při návratu do okna po pauze (s ochranou proti častému přepínání karet)
+      document.addEventListener('visibilitychange', function () {
+        if (!document.hidden && (Date.now() - lastCurrentFetchAt >= REFRESH_INTERVAL_MS - 5000)) {
+          fetchCurrentData();
+          if (!recordsMemoryCache || (Date.now() - recordsMemoryCache.time >= RECORDS_CACHE_TTL_MS)) {
+            fetchDryStreak(true);
+          }
+        }
+      });
+
+      // Hodinová obnova: stáhne 1× sdílený /api/records pro sérii sucha a zbytek obnoví jen pokud je sekce aktivní (jinak jen invaliduje)
+      setInterval(async function () {
+        if (document.hidden) return;
+        await fetchDryStreak(true);
+
+        const activeSection = document.body.dataset.section;
+        if (activeSection === 'statistiky') {
+          fetchStatisticsData(true);
+        } else {
+          statsLoaded = false;
+        }
+
+        if (activeSection === 'rekordy') {
+          fetchRecordsData(false); // využije čerstvě stažený recordsMemoryCache (0 extra HTTP dotazů)
+        } else {
+          recordsLoaded = false;
+        }
+      }, RECORDS_CACHE_TTL_MS);
     }, 30);
   }
 
