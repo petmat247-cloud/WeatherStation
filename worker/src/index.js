@@ -1217,34 +1217,36 @@ async function getStatsData(db) {
 
   // 1. Posledních 24h (obsahuje i 1h) — max ~1 440 řádků z measurements
   const recentPromise = db.prepare(`
+    WITH bounds AS (
+      SELECT ? AS c1h, ? AS c24h, ? AS today_start
+    )
     SELECT
-      ${selectWindowCols('timestamp >= ?', '1h')},
-      ${selectWindowCols('timestamp >= ?', '24h')},
-      MAX(CASE WHEN timestamp >= ? AND timestamp >= ? THEN rain_total END) AS rain_1h_today_max,
-      MIN(CASE WHEN timestamp >= ? AND timestamp >= ? THEN rain_total END) AS rain_1h_today_min,
-      MAX(CASE WHEN timestamp >= ? AND timestamp >= ? THEN rain_total END) AS rain_24h_today_max,
-      MIN(CASE WHEN timestamp >= ? AND timestamp >= ? THEN rain_total END) AS rain_24h_today_min,
-      (SELECT rain_total FROM measurements WHERE timestamp >= ? ORDER BY timestamp DESC LIMIT 1) AS latest_rain_total,
-      (SELECT MAX(timestamp) FROM measurements WHERE timestamp >= ?) AS latest_ts
+      ${selectWindowCols('timestamp >= bounds.c1h', '1h')},
+      ${selectWindowCols('timestamp >= bounds.c24h', '24h')},
+      MAX(CASE WHEN timestamp >= bounds.c1h AND timestamp >= bounds.today_start THEN rain_total END) AS rain_1h_today_max,
+      MIN(CASE WHEN timestamp >= bounds.c1h AND timestamp >= bounds.today_start THEN rain_total END) AS rain_1h_today_min,
+      MAX(CASE WHEN timestamp >= bounds.c24h AND timestamp >= bounds.today_start THEN rain_total END) AS rain_24h_today_max,
+      MIN(CASE WHEN timestamp >= bounds.c24h AND timestamp >= bounds.today_start THEN rain_total END) AS rain_24h_today_min,
+      (SELECT rain_total FROM measurements WHERE timestamp >= (SELECT c24h FROM bounds) ORDER BY timestamp DESC LIMIT 1) AS latest_rain_total,
+      (SELECT MAX(timestamp) FROM measurements WHERE timestamp >= (SELECT c24h FROM bounds)) AS latest_ts
     FROM measurements
-    WHERE timestamp >= ?
-  `).bind(
-    c1h, c24h,
-    c1h, todayStart, c1h, todayStart,
-    c24h, todayStart, c24h, todayStart,
-    c24h, c24h,
-    c24h
-  ).first();
+    CROSS JOIN bounds
+    WHERE timestamp >= bounds.c24h
+  `).bind(c1h, c24h, todayStart).first();
 
   // 2. Hraniční neúplný den pro přesné klouzavé okno 7d — max ~1 440 řádků z measurements
   const boundary7dPromise = db.prepare(`
+    WITH bounds AS (
+      SELECT ? AS start_ts, ? AS end_ts
+    )
     SELECT
-      ${selectWindowCols('timestamp >= ? AND timestamp < ?', '7db')},
-      MIN(CASE WHEN timestamp >= ? AND timestamp < ? THEN rain_total END) AS rain_7db_min,
-      MAX(CASE WHEN timestamp >= ? AND timestamp < ? THEN rain_total END) AS rain_7db_max
+      ${selectWindowCols('timestamp >= bounds.start_ts AND timestamp < bounds.end_ts', '7db')},
+      MIN(CASE WHEN timestamp >= bounds.start_ts AND timestamp < bounds.end_ts THEN rain_total END) AS rain_7db_min,
+      MAX(CASE WHEN timestamp >= bounds.start_ts AND timestamp < bounds.end_ts THEN rain_total END) AS rain_7db_max
     FROM measurements
-    WHERE timestamp >= ? AND timestamp < ?
-  `).bind(c7d, c7dNextDayStart, c7d, c7dNextDayStart, c7d, c7dNextDayStart, c7d, c7dNextDayStart).first();
+    CROSS JOIN bounds
+    WHERE timestamp >= bounds.start_ts AND timestamp < bounds.end_ts
+  `).bind(c7d, c7dNextDayStart).first();
 
   // 3. Všechny dny z daily_stats — ~200 řádků
   const dailyStatsPromise = db.prepare('SELECT * FROM daily_stats ORDER BY day ASC').all();
@@ -1403,17 +1405,17 @@ async function handleFetch(request, env, ctx) {
 
   try {
     if (path === '/api/current') {
-      const cacheKey = new Request(`${url.origin}/api/current`, { method: 'GET' });
+      const cacheKey = new Request(`${url.origin}/api/current?v=2`, { method: 'GET' });
       return await handleCachedEndpoint(cache, cacheKey, CACHE_CURRENT_TTL, corsHdrs, ctx, () => getCurrentData(env.DB));
     }
 
     if (path === '/api/records') {
-      const cacheKey = new Request(`${url.origin}/api/records`, { method: 'GET' });
+      const cacheKey = new Request(`${url.origin}/api/records?v=2`, { method: 'GET' });
       return await handleCachedEndpoint(cache, cacheKey, CACHE_RECORDS_TTL, corsHdrs, ctx, () => getRecordsData(env.DB));
     }
 
     if (path === '/api/stats') {
-      const cacheKey = new Request(`${url.origin}/api/stats`, { method: 'GET' });
+      const cacheKey = new Request(`${url.origin}/api/stats?v=2`, { method: 'GET' });
       return await handleCachedEndpoint(cache, cacheKey, CACHE_STATS_TTL, corsHdrs, ctx, () => getStatsData(env.DB));
     }
 
