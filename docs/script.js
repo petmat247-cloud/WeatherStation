@@ -1680,7 +1680,7 @@
       let explicitTheme = null;
       try { const saved = localStorage.getItem('weather-station-theme'); if (['light','dark'].includes(saved)) explicitTheme = saved; } catch (_) {}
       const initialTheme = explicitTheme || (mq.matches ? 'dark' : 'light');
-      function applyTheme(theme) { document.documentElement.dataset.theme = theme; document.querySelector('meta[name="theme-color"]').content = theme === 'dark' ? '#080a0d' : '#f2f3f5'; }
+      function applyTheme(theme) { document.documentElement.dataset.theme = theme; document.querySelector('meta[name="theme-color"]').content = theme === 'dark' ? '#080a0d' : '#edf2f8'; }
       applyTheme(initialTheme);
       // Bez změnové události při inicializaci. Původní fyzika přepínače zůstává zachována.
       switchControl.isOn = initialTheme === 'dark';
@@ -2065,7 +2065,7 @@
               const py=this.geometry.y(point.v);
               const color=`var(--plot-${info.color})`;
               const halo=this.node('circle',{class:'plot-marker-halo',cx:px.toFixed(2),cy:py.toFixed(2),r:8.5,fill:color,'fill-opacity':'.28'});
-              const dot=this.node('circle',{class:'plot-marker-dot',cx:px.toFixed(2),cy:py.toFixed(2),r:5.5,fill:color,stroke:'var(--canvas, #101625)','stroke-width':'2.5'});
+              const dot=this.node('circle',{class:'plot-marker-dot',cx:px.toFixed(2),cy:py.toFixed(2),r:5.5,fill:color,stroke:'var(--marker-stroke, var(--canvas, #101625))','stroke-width':'2.5'});
               this.markersGroup.append(halo,dot);
             }
           }
