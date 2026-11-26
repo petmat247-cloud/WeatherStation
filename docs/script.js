@@ -1611,11 +1611,12 @@
         el.setAttribute('aria-label',value == null ? 'Údaj není dostupný' : el.textContent);
       }
       card(id,values) {
+        const node = document.querySelector(`#card-${id} .card-state`);
+        if (!node) return;
         const { status } = this.store.state;
         const any = values.some(v => v != null), all = values.every(v => v != null);
         const ageUnknown = this.store.state.data?.measuredAt == null;
         const stale = this.store.isStale();
-        const node = document.querySelector(`#card-${id} .card-state`);
         node.textContent = !any ? (status === 'loading' ? 'Načítání' : 'Bez údaje') : !all ? 'Část údajů chybí' : status === 'error' || status === 'loading' ? 'Poslední dostupné' : stale ? 'Starší údaj' : ageUnknown ? 'Čas neznámý' : 'Měření';
         node.dataset.state = stale && any ? 'stale' : status;
       }
@@ -1641,7 +1642,7 @@
         this.time('measuredTime',data.measuredAt ?? null,status === 'loading' ? 'Čekáme na měření' : 'Zatím není dostupné');
         this.time('loadedTime',receivedAt,'Data dosud nebyla načtena');
         this.text('measuredRelative',data.measuredAt != null ? this.relative(data.measuredAt) : 'Čas měření neznáme');
-        this.text('loadedRelative',receivedAt != null ? `${this.relative(receivedAt)} · pražský čas` : 'Časové pásmo Europe/Prague');
+        this.text('loadedRelative',receivedAt != null ? this.relative(receivedAt) : '');
         const grid = document.getElementById('weatherGrid'); grid.setAttribute('aria-busy',String(status === 'loading')); grid.dataset.loading = String(status === 'loading');
         for (const [id,key,integer] of [ ['outValue','outsideC'],['inValue','insideC'],['outHumidity','outsideHumidity',true],['inHumidity','insideHumidity',true],['pressureValue','pressureHpa'],['windValue','speedMps'],['rainHourValue','rainHour'],['rainDayValue','rainDay'],['dryValue','dryDays',true] ]) this.value(id,data[key],integer);
         this.card('outdoor',[data.outsideC]); this.card('indoor',[data.insideC]);
@@ -1950,7 +1951,8 @@
         this.hideTooltip();this.svg.replaceChildren();this.svg.setAttribute('viewBox',`0 0 ${width} ${this.frame.clientHeight}`);
         this.svg.dataset.from=String(this.range.from);this.svg.dataset.to=String(this.range.to);this.svg.dataset.period=this.range.code;
         const primary=HISTORY_SERIES[this.def.keys[0]],state=this.owner.store.state;
-        this.element.querySelector('.chart-subtitle').textContent=this.def.pressure ? (state.data?.pressureKind==='seaLevel'?'Tlak přepočtený na hladinu moře · hPa':state.data?.pressureKind==='absolute'?'Absolutní tlak v místě stanice · hPa':'Typ tlaku není uveden · hPa') : this.def.area ? 'Intenzita v čase · mm/h, nikoli úhrn v mm' : `Vývoj v čase · ${primary.unit}`;
+        const subEl=this.element.querySelector('.chart-subtitle');
+        if(subEl) subEl.textContent=this.def.pressure ? (state.data?.pressureKind==='seaLevel'?'Tlak přepočtený na hladinu moře · hPa':state.data?.pressureKind==='absolute'?'Absolutní tlak v místě stanice · hPa':'Typ tlaku není uveden · hPa') : this.def.area ? 'Intenzita v čase · mm/h, nikoli úhrn v mm' : `Vývoj v čase · ${primary.unit}`;
         const available=[];let totalVisible=0;
         for(const key of this.def.keys){
           const stats=HistoryMath.stats(this.ranged[key]?.points??[]);const {button,unavailable}=this.legendButtons.get(key);
@@ -2089,7 +2091,8 @@
       constructor(carousel){
         this.carousel=carousel;this.store=new HistoryStore();this.code=carousel.items[carousel.activeIndex].dataset.code;this.dirty=true;this.pending=null;
         this.dateFormatter=new Intl.DateTimeFormat('cs-CZ',{timeZone:'Europe/Prague',day:'numeric',month:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23',timeZoneName:'short'});
-        this.rangeDateFormatter=new Intl.DateTimeFormat('cs-CZ',{timeZone:'Europe/Prague',day:'numeric',month:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});
+        this.rangeDateFormatter=new Intl.DateTimeFormat('cs-CZ',{timeZone:'Europe/Prague',day:'numeric',month:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
+        this.rangeDateOnlyFormatter=new Intl.DateTimeFormat('cs-CZ',{timeZone:'Europe/Prague',day:'numeric',month:'numeric',year:'numeric'});
         this.numberFormatter=new Intl.NumberFormat('cs-CZ',{maximumFractionDigits:1,minimumFractionDigits:1,useGrouping:false});
         this.charts=HISTORY_CHARTS.map(def=>new GlassHistoryChart(def,this));
         this.dock=document.querySelector('.top-dock');this.dockAnchor=document.createComment('Původní umístění společného časového přepínače');this.dock.before(this.dockAnchor);
@@ -2118,8 +2121,16 @@
       }
       render(){
         const state=this.store.state,data=state.data,range=HistoryMath.range(this.code,data);this.currentRange=range;
-        document.getElementById('historyRange').textContent=!data?.total ? '—' : `${this.rangeDateFormatter.format(range.from)} — ${this.rangeDateFormatter.format(range.to)}`;
-        document.getElementById('activeTimeIndicator').textContent=`Vybráno: ${this.carousel.items.find(item=>item.dataset.code===this.code)?.dataset.time??'24 hodin'}${this.code==='all'?' · celá dostupná historie':''}`;
+        const hrEl=document.getElementById('historyRange');
+        if(hrEl){
+          if(!data?.total) hrEl.textContent='—';
+          else {
+            const fmt=['1h','24h'].includes(this.code)?this.rangeDateFormatter:this.rangeDateOnlyFormatter;
+            hrEl.textContent=`${fmt.format(range.from)} — ${fmt.format(range.to)}`;
+          }
+        }
+        const atiEl=document.getElementById('activeTimeIndicator');
+        if(atiEl) atiEl.textContent=`Vybráno: ${this.carousel.items.find(item=>item.dataset.code===this.code)?.dataset.time??'24 hodin'}${this.code==='all'?' · celá dostupná historie':''}`;
         let title='Historie není připojena',tone='neutral',message='Historická měření zatím nejsou připojena. Pomlčka znamená chybějící hodnotu, nikoli nulu.';
         if(state.status==='loading'){title='Načítání historie';message=data?'Načítáme nové údaje. Do té doby je zobrazena poslední dostupná historie.':'Čekáme na historická měření. Prázdný graf není nulová naměřená hodnota.';}
         if(state.status==='error'){title='Historie není dostupná';tone='warning';message=state.message||(data?'Nové údaje se nepodařilo načíst. Grafy zobrazují poslední dostupnou historii.':'Historii se nepodařilo načíst. Čas posledního měření nevytváříme.');}
@@ -2243,8 +2254,9 @@
     class StatisticsController {
       constructor(carousel,history){
         this.carousel=carousel;this.history=history;this.store=new StatisticsStore();this.compact=window.matchMedia('(max-width:1099px)');this.isMounted=false;this.dirty=true;this.pending=null;this.scrollFrame=null;this.jumping=false;this.lastNavigation=0;
-        this.fullDate=new Intl.DateTimeFormat('cs-CZ',{timeZone:'Europe/Prague',day:'numeric',month:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23',timeZoneName:'short'});
+        this.fullDate=new Intl.DateTimeFormat('cs-CZ',{timeZone:'Europe/Prague',day:'numeric',month:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});
         this.shortDate=new Intl.DateTimeFormat('cs-CZ',{timeZone:'Europe/Prague',day:'numeric',month:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
+        this.dateOnly=new Intl.DateTimeFormat('cs-CZ',{timeZone:'Europe/Prague',day:'numeric',month:'numeric',year:'numeric'});
         this.formatNumber=new Intl.NumberFormat('cs-CZ',{minimumFractionDigits:1,maximumFractionDigits:1,useGrouping:false});this.formatCount=new Intl.NumberFormat('cs-CZ');
         let initial;try{initial=new URLSearchParams(location.search).get('statsPeriod');}catch(_){}
         this.selected=STATISTICS_PERIODS.some(p=>p.code===initial)?initial:'1h';this.initialAnchor=initial===this.selected;this.wasActivated=false;
@@ -2336,8 +2348,11 @@
           card.dataset.from=!data||summary.from===null?'':String(summary.from);card.dataset.to=data?String(summary.to):'';card.dataset.quality=data&&!summary.countReliable?'partial':status;
           const range=card.querySelector('.statistics-card-range');range.replaceChildren();
           if(!data||summary.from===null){range.textContent='—';}
-          else{for(const [i,t]of [summary.from,summary.to].entries()){if(i)range.append(document.createTextNode(' — '));const time=document.createElement('time');time.dateTime=new Date(t).toISOString();time.textContent=this.shortDate.format(t);range.append(time);}}
-          card.querySelector('.statistics-card-kind').textContent=data?'Souhrn měření':'Čeká na data';
+          else{
+            const rangeFmt=['1h','24h'].includes(summary.code)?this.shortDate:this.dateOnly;
+            for(const [i,t]of [summary.from,summary.to].entries()){if(i)range.append(document.createTextNode(' — '));const time=document.createElement('time');time.dateTime=new Date(t).toISOString();time.textContent=rangeFmt.format(t);range.append(time);}
+          }
+          const kindEl=card.querySelector('.statistics-card-kind'); if(kindEl) kindEl.textContent=data?'Souhrn měření':'Čeká na data';
           for(const field of STATISTICS_METRICS){
             const group=card.querySelector(`[data-metric="${field.key}"]`);
             if(!group) continue;
@@ -2347,7 +2362,7 @@
           }
           this.setValue(card.querySelector('[data-value="gust"]'),summary.gust?.value);card.querySelector('.statistics-gust-note').textContent=summary.gust?.n?`Z ${this.formatCount.format(summary.gust.n)} záznamů nárazů`:'Nárazy větru nejsou dostupné';
           const rain=summary.rain||{};this.setValue(card.querySelector('[data-value="rain"]'),rain.value);
-          card.querySelector('.statistics-rain-label').textContent=rain.kind==='intensity'?'Maximální intenzita srážek':rain.kind==='total'?'Celkový úhrn srážek':rain.value!==null?'Úhrn mezi odečty':'Maximální intenzita srážek';
+          card.querySelector('.statistics-rain-label').textContent=rain.kind==='intensity'?'Max. intenzita srážek':'Úhrn srážek';
           card.querySelector('.statistics-rain-unit').textContent=rain.kind==='intensity'?'mm/h':rain.value!==null?'mm':'mm/h';
           card.querySelector('.statistics-rain-note').textContent=rain.kind==='intensity'?`Z ${this.formatCount.format(rain.n)} měření intenzity`:rain.value!==null?`Intenzita není dostupná. Odečty: ${this.shortDate.format(rain.from)} — ${this.shortDate.format(rain.to)}`:data?(rain.reason||'Intenzita není dostupná'):'Intenzita zatím není dostupná';
           this.setValue(card.querySelector('.statistics-count-number'),summary.count ?? summary.availableCount,true);
@@ -2499,7 +2514,7 @@
         this.number=new Intl.NumberFormat('cs-CZ',{maximumFractionDigits:1,minimumFractionDigits:1,useGrouping:false});
         this.count=new Intl.NumberFormat('cs-CZ');
         this.date=new Intl.DateTimeFormat('cs-CZ',{timeZone:'Europe/Prague',day:'numeric',month:'numeric',year:'numeric'});
-        this.fullDate=new Intl.DateTimeFormat('cs-CZ',{timeZone:'Europe/Prague',day:'numeric',month:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23',timeZoneName:'short'});
+        this.fullDate=new Intl.DateTimeFormat('cs-CZ',{timeZone:'Europe/Prague',day:'numeric',month:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});
         this.cards=new Map(RECORD_DEFINITIONS.map(def=>[def.key,document.getElementById(`record-${def.key}`)]));
         this.store.addEventListener('change',()=>this.schedule());
         window.addEventListener('meteo:sectionchange',()=>this.schedule());
@@ -2538,7 +2553,8 @@
           node.dataset.state=record?'available':'unavailable';value.classList.toggle('is-missing',!record);
           value.textContent=record?(def.period==='dry'?this.count.format(record.value):this.number.format(record.value)):'—';
           node.querySelector('.record-unit').textContent=record?.unit??def.unit;
-          node.querySelector('.record-availability').textContent=record?(status==='error'||status==='loading'||stale?'Poslední dostupný rekord':'Historický rekord'):status==='loading'?'Načítání podkladů…':data&&!data.complete?'Nelze potvrdit z neúplné historie':empty?'Žádná měření':'Zatím nedostupné';
+          const availEl=node.querySelector('.record-availability');
+          if(availEl) availEl.textContent=record?(status==='error'||status==='loading'||stale?'Poslední dostupný rekord':'Historický rekord'):status==='loading'?'Načítání podkladů…':data&&!data.complete?'Nelze potvrdit z neúplné historie':empty?'Žádná měření':'Zatím nedostupné';
           const time=node.querySelector('.record-time');
           if(time){
             time.replaceChildren();
